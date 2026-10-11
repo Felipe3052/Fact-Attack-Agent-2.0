@@ -1,0 +1,146 @@
+{
+  "cases": 180,
+  "responses": 180,
+  "issues": {},
+  "tasks": {
+    "A": {
+      "cases": 90,
+      "macro_f1": 0.932944832944833,
+      "threshold": 0.6,
+      "passes_threshold": true,
+      "accuracy": 0.9333333333333333,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9666666666666667,
+          "recall": 0.9666666666666667,
+          "f1": 0.9666666666666667,
+          "support": 30
+        },
+        "neutral": {
+          "precision": 0.8571428571428571,
+          "recall": 1.0,
+          "f1": 0.9230769230769231,
+          "support": 30
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091,
+          "support": 30
+        }
+      },
+      "evidence_score": 0.8333333333333334,
+      "evidence": {
+        "cases": 60,
+        "found": 50,
+        "without_gold_passage": 0
+      }
+    },
+    "B": {
+      "cases": 90,
+      "macro_f1": 0.9554720133667501,
+      "threshold": 0.7,
+      "passes_threshold": true,
+      "accuracy": 0.9555555555555556,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.9,
+          "f1": 0.9473684210526315,
+          "support": 30
+        },
+        "neutral": {
+          "precision": 0.9666666666666667,
+          "recall": 0.9666666666666667,
+          "f1": 0.9666666666666667,
+          "support": 30
+        },
+        "contradiction": {
+          "precision": 0.9090909090909091,
+          "recall": 1.0,
+          "f1": 0.9523809523809523,
+          "support": 30
+        }
+      }
+    }
+  },
+  "languages": {
+    "A de->de": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "A de->fr": {
+      "cases": 10,
+      "macro_f1": 0.6
+    },
+    "A de->it": {
+      "cases": 10,
+      "macro_f1": 0.8518518518518517
+    },
+    "A fr->de": {
+      "cases": 10,
+      "macro_f1": 0.7851851851851852
+    },
+    "A fr->fr": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "A fr->it": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "A it->de": {
+      "cases": 10,
+      "macro_f1": 0.8518518518518517
+    },
+    "A it->fr": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "A it->it": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "B de->de": {
+      "cases": 10,
+      "macro_f1": 0.8857142857142858
+    },
+    "B de->fr": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "B de->it": {
+      "cases": 10,
+      "macro_f1": 0.8023809523809525
+    },
+    "B fr->de": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "B fr->fr": {
+      "cases": 10,
+      "macro_f1": 0.9153439153439153
+    },
+    "B fr->it": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "B it->de": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "B it->fr": {
+      "cases": 10,
+      "macro_f1": 1.0
+    },
+    "B it->it": {
+      "cases": 10,
+      "macro_f1": 1.0
+    }
+  },
+  "usage_mean_per_case": {
+    "input_tokens": 2954.8444444444444,
+    "output_tokens": 63.46111111111111,
+    "inference_time_ms": 1432.2111111111112
+  }
+}

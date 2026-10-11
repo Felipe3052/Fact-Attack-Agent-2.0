@@ -22,21 +22,30 @@ Italian, in any combination.
 
 ## 📊 Results
 
-Evaluated on the official OST dataset (v1.1, 60 booklets, ~66 % cross-lingual) with the organisers' `evaluate.py`.
-The **test split holds 5 voting dates that were never used during development** (401 pairs), as a stand-in for the
-held-out benchmark. Model: `swiss-ai/Apertus-v1.5-70B-thinking` on CSCS.
+Model: `swiss-ai/Apertus-v1.5-70B-thinking` on CSCS. Every number below comes from the submission configuration run
+through the official CLI (`--input/--output`) and scored with the organisers' `evaluate.py`; predictions and reports
+are saved in [`track_2a/results/generalization/`](track_2a/results/generalization/).
 
-| Task | Macro-F1 | Evidence Hit@5 | Ø input tokens | Ø output tokens | Non-LLM time / case |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **A · Advanced** — booklet PDF + claim + vote | **0.945** | **0.839** | 3,983 | 75 | ~6 ms |
-| **B · Beginner** — reference text + claim | **0.975** | – | 2,532 | 55 | ~2 ms |
+| Evaluation set | Task | Macro-F1 | Evidence Hit@5 | Ø input / output tokens |
+| :--- | :--- | :---: | :---: | :---: |
+| **Unseen booklets**: own holdout on the 27 Sep 2026 vote, 90 claims, never used for a decision | A · Advanced | **0.93–0.94** | **0.83–0.85** | 3,863 / 67 |
+| | B · Beginner | **0.966** | – | 1,758 / 60 |
+| **Whole dataset** (v1.1, 1,488 pairs, 20 voting dates, 5 date-grouped folds) | A · Advanced | **0.943** (folds 0.919–0.977) | **0.869** | 3,866 / 76 |
+| | B · Beginner | **0.984** (folds 0.968–0.990) | – | 1,732 / 62 |
 
-Submission image, run as the jury does (`--input/--output`, read-only `/data`), on the 401 test pairs of each task.
-On booklets that are not in the image (the jury uses a new set), the processing time stays at ~22 ms per case.
+- Task A: booklet PDF + claim + vote. Task B: reference text + claim. Mean Apertus time per case 1.9 s (A) / 1.1 s (B);
+  processing time outside the model calls stays in the millisecond range per case.
+- **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
+  vote, which are not part of the dataset. Written before the system ever ran on them, labels checked by a second
+  person (90/90 agree), run once at the end. Small (± ~0.05 macro-F1), but the only data no design decision saw.
+- **Whole dataset:** all of it has been used for design decisions by now, including the earlier 5-date test split
+  (where the submission scores A 0.942 / Hit@5 0.833, B 0.982); it shows how stable the results are across voting
+  dates, not how they generalise. Running the same configuration twice changes 3 of 1,488 labels.
 
 The official score weights macro-F1, evidence, processing time (wall clock minus time waiting for Apertus) and tokens
 (both relative to the best team). The submission combines the work of both team members, each part chosen by paired
-measurements on the same cases ([experiment log](track_2a/docs/experiments.md#merge-of-both-lines-felipe--josip--2026-10-09)):
+measurements on the same cases ([experiment log](track_2a/docs/experiments.md#merge-of-both-lines-felipe--josip--2026-10-09),
+[independent experiments](track_2a/docs/independent_experiments.md)):
 
 - **8 instead of 12 pages** of context: 31 % fewer input tokens for −0.003 macro-F1 (dev 300).
 - **Evidence from PyMuPDF pages and text blocks** (Josip): Hit@5 0.727 → 0.813 on the same predictions.
@@ -44,6 +53,10 @@ measurements on the same cases ([experiment log](track_2a/docs/experiments.md#me
   labels over three paired comparisons, macro-F1 0.930 → 0.945 on test, for ~3 % more tokens.
 - **Start-up and parsing** (Felipe): standard-library HTTP client, booklets parsed in a process pool and cases
   processed booklet by booklet: 104 → 8 ms per case on new booklets.
+- **Long task-B references cut to the passages that match the claim** (E2): −30 % input tokens on the whole dataset
+  (macro-F1 0.981 → 0.984), −13 % on the holdout (0.955 → 0.966). Three other ideas were measured and dropped: fewer
+  legal-text pages (−0.005 F1), narrower page windows (−9 % tokens but −0.008 F1), evidence blocks ranked with the
+  translated claim (+0.004 Hit@5, inconsistent).
 
 **Evidence:** every Entailment / Contradiction prediction returns up to five verbatim quotes with their 1-based page:
 up to three cited pages as PyMuPDF reads them, plus the two text blocks of the cited pages that best match claim and
@@ -126,9 +139,13 @@ Details and every rejected idea: [experiment log](track_2a/docs/experiments.md).
 4. **Speaker boost and decision rules.** If the claim names a side ("the committee argues …"), that side's two best
    argument pages are always in the context; this cut the error rate on committee claims from 13 % to 7 %. A Neutral label next to a
    confident other relation follows the confidences, otherwise Apertus' own label is kept.
-5. **Measured, not assumed.** Every design choice was tested on a dev split; ideas that did not help (a hard
-   numerical override, label-only answers, small passages, full-booklet prompting) were dropped. See the
-   [experiment log](track_2a/docs/experiments.md).
+5. **Task B gets only the relevant part of a long reference.** The reference is split into passages; when it is longer
+   than 6,000 characters, its opening passage and the passages that best match the claim (BM25, with the claim's
+   translation for cross-lingual pairs) are sent, in document order, up to that budget.
+6. **Measured, not assumed.** Every design choice was tested on paired runs; ideas that did not help (a hard
+   numerical override, label-only answers, small passages, full-booklet prompting, fewer or narrower pages) were
+   dropped. See the [experiment log](track_2a/docs/experiments.md) and the
+   [independent experiments](track_2a/docs/independent_experiments.md).
 
 ---
 
@@ -160,18 +177,25 @@ make web          # Streamlit app at http://localhost:8501
 `make run` runs our own benchmark on the test split (macro-F1 ≈ 0.93 with 8 pages; temperature 0, so runs differ by
 at most a few pairs). `NLI_DATASET=data/demo_dataset.jsonl make run` runs the 28-pair demo set instead (~40 s, ≈ 0.91).
 
-Defaults (override via environment variables or `.env`):
+The main defaults (override via environment variables or `.env`; [`.env.example`](.env.example) lists every setting
+with its default, and a test keeps that file equal to the code):
 
 ```bash
 LLM_NAME=swiss-ai/Apertus-v1.5-70B-thinking
 BASE_URL=https://api.inference.cscs.ch/v1   # LLM_BASE_URL works too
-NLI_STRATEGY=hybrid      # 'hybrid' | 'retrieval' | 'full'
+NLI_STRATEGY=hybrid                     # 'hybrid' | 'retrieval' | 'full'
 NLI_TOP_K=8
-PROMPT_MODE=ids          # 'ids' | 'json' | 'compact'
-EVIDENCE_SPLIT=2,2       # first two cited pages in halves as evidence
-EVIDENCE_FILL=true       # free evidence slots: best third of further pages
-NLI_WORKERS=4            # cases processed in parallel by the batch CLI
+PROMPT_MODE=ids                         # 'ids' | 'json' | 'compact'
+RETRIEVAL_QUERY_MODE=union              # BM25 with the claim and its translation into the booklet language
+EVIDENCE_POLICY=raw_pages_and_blocks    # cited PyMuPDF pages + best-matching text blocks
+REFERENCE_MAX_CHARS=6000                # task B: longer references cut to the passages that match the claim
+NLI_WORKERS=4                           # cases processed in parallel by the batch CLI
 ```
+
+Keep only `BASE_URL` / `API_KEY` in a local `.env`: any other value there changes what a local run measures.
+Decision runs that must match the submission exactly: `python scripts/run_decision.py --data <cases> --name <run>`
+(forces the `.env.example` settings, calls the official CLI, scores with `evaluate.py`, saves everything under
+`track_2a/results/generalization/`); compare two runs with `scripts/report_decision.py`.
 
 ### CLI
 

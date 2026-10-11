@@ -126,6 +126,7 @@ class PassageRetriever:
         exclude_sections: Optional[set] = None,
         ensure_sections: Optional[Dict[str, int]] = None,
         query_variants: Optional[List[str]] = None,
+        section_caps: Optional[Dict[str, int]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Booklet-wide ranking: normalised BM25(claim) + vote_weight * normalised BM25(vote title).
@@ -158,6 +159,19 @@ class PassageRetriever:
         ranked = sorted(range(len(self.paragraphs)), key=lambda i: combined[i], reverse=True)
         if exclude_sections:
             ranked = [i for i in ranked if self.paragraphs[i].get("section") not in exclude_sections]
+        # At most n pages of a section (e.g. the legal text, which repeats the vote title and so outranks the
+        # explanation pages); the freed places go to the next pages by rank, so the context size stays top_k
+        if section_caps:
+            taken: Dict[str, int] = {}
+            capped = []
+            for i in ranked:
+                section = self.paragraphs[i].get("section")
+                if section in section_caps:
+                    if taken.get(section, 0) >= section_caps[section]:
+                        continue
+                    taken[section] = taken.get(section, 0) + 1
+                capped.append(i)
+            ranked = capped
         selected = ranked[:top_k]
         # Guarantee the best pages of a section (e.g. the committee's arguments for a committee claim): they replace
         # the lowest-ranked other pages, so the context size stays top_k

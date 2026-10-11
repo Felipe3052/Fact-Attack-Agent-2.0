@@ -1,0 +1,27 @@
+{
+  "dataset": "own holdout, booklets of 2026-09-27",
+  "claims": 90,
+  "case_count": 180,
+  "claims_sha256": "6652824791e3756b650dab0d482a35f08e9b46a63ab5dbeb763d62683470bf54",
+  "booklets": {
+    "2026-09-27_de.pdf": {
+      "sha256": "6d27a4c6c5ed0e8583a49864979dcc2ddeeb4c65e895b97a2df3fa1d089dbc15",
+      "url": "https://www.admin.ch/dam/de/sd-web/3E6DtQlSES3i/DE-%20Volksabstimmung%20vom%2027.%20September%202026%20-%20Erl%C3%A4uterungen%20des%20Bundesrates.pdf"
+    },
+    "2026-09-27_fr.pdf": {
+      "sha256": "df3b26401da0189ea2872f1d75ed5198e158e84e51c962eb463443aea79e0dfc",
+      "url": "https://www.admin.ch/dam/fr/sd-web/3E6DtQlSES3i/Votation%20populaire%20du%2027%20septembre%202026%20-%20Explications%20du%20Conseil%20f%C3%A9d%C3%A9ral.pdf"
+    },
+    "2026-09-27_it.pdf": {
+      "sha256": "e7bfa483ffe4623994266cc244d308b8f9eae97815ac0bebcc496f81f5841e00",
+      "url": "https://www.admin.ch/dam/it/sd-web/3E6DtQlSES3i/Votazione%20popolare%20del%2027%20settembre%202026%20-%20Spiegazioni%20del%20Consiglio%20federale.pdf"
+    }
+  },
+  "file_hashes": {
+    "cases.jsonl": "0d14419b6ef99d13b30c2a64fefa066df6540b78df7c4561bb613d16bab83eee",
+    "expected-labels.jsonl": "761eb884c58849a5f748e218590aa32e5369fea315471174565952bb6e7a9e77",
+    "folds.jsonl": "6199a92e095602b4a405df64ade54668630e2f6595ca8e2f34c0efb8afb087c8"
+  },
+  "historical_test_is_observed": false,
+  "untouched_holdout_available": true
+}

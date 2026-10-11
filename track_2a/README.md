@@ -9,22 +9,21 @@ An Apertus-powered system that decides whether an official Swiss voting booklet 
 or **contradicts (2)** a claim, and cites the booklet pages that justify the decision — for every combination of
 German, French and Italian.
 
-- **Results** (submission image, test split of 5 voting dates, 401 pairs, organisers' `evaluate.py`): advanced task
-  **0.945** macro-F1, evidence Hit@5 **0.839**, 3,983 input tokens; beginner task **0.975**
+- **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
+  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims, run once): advanced **0.93–0.94** macro-F1,
+    Hit@5 **0.83–0.85**, 3,863 input tokens; beginner **0.966**, 1,758 input tokens
+  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.943**, Hit@5 **0.869**,
+    3,866 input tokens; beginner **0.984**, 1,732 input tokens
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
-  **Experiment log:** [docs/experiments.md](docs/experiments.md)
+  **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 
 > Predictions describe the relationship between a claim and the official booklet. They are not political advice.
 
-R2 combines the original/translated BM25 queries with existing speaker boost and
-source-grounded page/block evidence. It preserves the original claim and NLI
-prompt. Reported Advanced tokens increase 1.39%; official separate-task efficiency
-and private competition scores are unavailable. **115 local and 115 CPU-container
-tests pass.** All 91 R2 label discrepancies have source reviews; two annotation/scope
-ambiguities remain flagged without changing gold. Full comparison and reproduction:
-[final report](docs/competition_optimization_report.md),
-[comparison.csv](results/competition_optimization/comparison.csv),
-[best_config.json](results/competition_optimization/best_config.json).
+Josip's earlier comparison of retrieval and evidence variants (R2 and others, all 1,488 cases, k=12) is in the
+[optimization report](docs/competition_optimization_report.md). The measurements since then (reproducible decision
+runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E4) are in
+[independent_experiments.md](docs/independent_experiments.md) with their predictions in
+[results/generalization/](results/generalization/).
 
 ---
 
@@ -35,21 +34,27 @@ pip install -r requirements.txt
 cp .env.example .env          # then set API_KEY
 ```
 
-Configuration (environment variables or `.env`):
+Configuration (environment variables or `.env`). [`.env.example`](.env.example) lists every setting with its
+default (what the submission image runs; a test keeps it equal to `src/config.py`). The main ones:
 
 ```ini
 LLM_NAME=swiss-ai/Apertus-v1.5-70B-thinking
 BASE_URL=https://api.inference.cscs.ch/v1   # official name; LLM_BASE_URL works too
 API_KEY=your_api_key_here                   # official name; LLM_API_KEY works too
-NLI_STRATEGY=hybrid      # 'hybrid' (default) | 'retrieval' | 'full'
+NLI_STRATEGY=hybrid                         # 'hybrid' (default) | 'retrieval' | 'full'
 NLI_TOP_K=8
-PROMPT_MODE=ids          # 'ids' (default) | 'json' | 'compact'
-PAGE_MAX_CHARS=3000      # clip over-long pages (0 = off)
-SPEAKER_BOOST=2          # always include the named side's 2 best argument pages (0 = off)
-EVIDENCE_SPLIT=2,2       # first two cited pages in halves as evidence
-EVIDENCE_FILL=true       # free evidence slots: best third of further pages
-NLI_WORKERS=4            # cases processed in parallel by the batch CLI
+PROMPT_MODE=ids                             # 'ids' (default) | 'json' | 'compact'
+PAGE_MAX_CHARS=3000                         # clip over-long pages (0 = off)
+SPEAKER_BOOST=2                             # always include the named side's 2 best argument pages (0 = off)
+RETRIEVAL_QUERY_MODE=union                  # BM25 with the claim and its translation into the booklet language
+EVIDENCE_POLICY=raw_pages_and_blocks        # cited PyMuPDF pages + best-matching text blocks
+REFERENCE_MAX_CHARS=6000                    # task B: longer references cut to the passages that match the claim
+NLI_WORKERS=4                               # cases processed in parallel by the batch CLI
 ```
+
+A value set in a local `.env` overrides these for local runs; keep only endpoint and key there.
+`python scripts/run_decision.py --data <prepared cases> --name <run>` runs exactly the submission configuration
+(plus `--set KEY=VALUE` overrides) through the official CLI and saves predictions and scores.
 
 Without an API key the CLI stops with an error; `--mock` (or `MOCK_APERTUS=true`) runs an offline heuristic mock
 mode for tests only.
@@ -122,10 +127,15 @@ in the image, and a `booklet_url` that is not is downloaded.
 track_2a/
 ├── app.py                    # Streamlit demo (fact check, benchmark dashboard, architecture)
 ├── technical_report.md       # Architecture, evaluation, findings, limitations
+├── .env.example              # Every setting with its default (= what the submission image runs)
 ├── docs/experiments.md       # Every experiment with its numbers
+├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E4
 ├── docs/FactAttack_Technical_Report.pdf  # Submission PDF of the report (docs/build_report_pdf.py)
 ├── results/                  # Saved benchmark runs + summary.json
+│   └── generalization/       # Decision runs: predictions, official scores, fold/language/class reports
+├── scripts/                  # run_decision / report_decision, holdout builder, competition audit tools
 ├── data/
+│   ├── holdout_2026-09-27/   # Untouched holdout: 90 claims on the 27 Sep 2026 booklets + label review
 │   ├── booklets/             # 2026-06-14 booklets (others are downloaded)
 │   ├── demo_dataset.jsonl    # Early 28-pair demo set
 │   ├── demo_cases.json       # Verified demo examples for the app (with cached results)

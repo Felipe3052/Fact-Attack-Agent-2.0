@@ -17,18 +17,20 @@ French or Italian) and a claim (any of the three languages), it classifies the c
 **Neutral (1)** or **Contradiction (2)** and returns the booklet pages that justify the decision, together with
 token usage and inference time.
 
-On a test split of **5 voting dates** (401 pairs of the official dataset v1.1, scored with the organisers'
-`evaluate.py`, submission image run as the jury runs it), the system reaches **macro-F1 0.945** and **evidence Hit@5
-0.839** on the advanced task (booklet PDF) and **macro-F1 0.975** on the beginner task (reference text), at 3,983 /
-2,532 input tokens, 55–75 output tokens and ~6 ms (advanced) / ~2 ms (beginner) of processing time per case outside
-the LLM calls; on booklets that are not in the image ~22 ms.
+On **booklets the system never saw** (our holdout: 90 claims on the 27 September 2026 vote, labels checked by a
+second person, run once), it reaches **macro-F1 0.93–0.94** and **evidence Hit@5 0.83–0.85** on the advanced task
+(booklet PDF) and **0.966** on the beginner task (reference text). On the whole official dataset (v1.1, 1,488 pairs,
+20 voting dates in 5 date-grouped folds) the same configuration scores **0.943 / Hit@5 0.869** and **0.984**, at
+3,866 / 1,732 input tokens and 62–76 output tokens per case, with processing time outside the LLM calls in the
+millisecond range. All scores come from the organisers' `evaluate.py` on the official CLI's output.
 
 The official score also weighs evidence, processing time and tokens (relative to the best team), so after the
 organisers' Q&A we re-tuned for it (section 2.6). The two team members first optimised separately and then merged
 their lines part by part, each choice decided by paired runs on the same cases: 8 instead of 12 pages (−31 % input
 tokens, −0.003 F1 on dev), evidence quoted from PyMuPDF pages and text blocks (Hit@5 0.73 → 0.81 on the same
 predictions), BM25 retrieval with the claim and its translation into the booklet language (macro-F1 0.930 → 0.945 on
-test), and a start-up and parsing path that keeps the scored processing time in milliseconds.
+test), a start-up and parsing path that keeps the scored processing time in milliseconds, and, last, beginner-task
+references cut to the passages that match the claim (−30 % input tokens at equal macro-F1).
 
 The central finding for the challenge's research question: **sending a dozen well-chosen pages beats sending the
 whole booklet** — 0.946 vs. 0.730 macro-F1 on the same 150 test pairs, with ~10× fewer input tokens.
@@ -107,7 +109,12 @@ JSON object: three confidences, the label, and the ids of the pages that justify
 
 ### 2.4 Beginner task
 The reference string (up to 25k characters) is split into passages of ≤ 700 characters at sentence boundaries,
-numbered and sent with the same prompt, so evidence is a specific passage rather than the whole reference.
+numbered and sent with the same prompt, so evidence is a specific passage rather than the whole reference. A
+reference longer than 6,000 characters is cut to its opening passage plus the passages that best match the claim
+(BM25 with the claim and, for cross-lingual pairs, its translation), in document order, up to 6,000 characters.
+On all 1,488 beginner cases this saves 30 % of the input tokens at equal macro-F1 (0.981 → 0.984; 8 fixed / 3 broken
+claims, against 2 changed labels when the unchanged system runs twice); on the holdout 0.955 → 0.966 at −13 %. The
+length of a reference is never used as a hint for its label.
 
 ### 2.5 CLI and output format
 `python -m src --input cases.jsonl --output predictions.jsonl` (the Docker entrypoint) reads the official case format (JSON or JSONL; a case has
@@ -134,7 +141,8 @@ with an Apertus request in flight.
 
 - **Contract:** `BASE_URL` / `API_KEY` take precedence over our older variable names; the parse cache of the 60 dataset
   booklets is baked into the image read-only and new entries go to `/tmp`; a CI step runs the image exactly this way.
-- **Tokens:** 8 pages instead of 12 (-31 % input tokens); a condensed prompt was rejected (5.3).
+- **Tokens:** 8 pages instead of 12 (−31 % input tokens); beginner references cut to the matching passages (−30 %,
+  2.4); a condensed prompt, narrower page windows and fewer legal-text pages cost F1 and were rejected (5.3).
 - **Processing time:** a standard-library HTTP client instead of the openai SDK (~1 s less start-up); cases run four
   at a time, so parsing and retrieval of one case overlap with requests of others; uncached booklets are parsed by a
   process pool started before anything else, and cases are processed booklet by booklet. The CLI reports its own
@@ -163,34 +171,39 @@ with an Apertus request in flight.
 - **Dataset:** `OSTswiss/MNLIoverSwissVotingBooklets` — 1,495 human-annotated claim/reference pairs from
   60 booklets (2020–2026), balanced labels, ~66 % cross-lingual pairs.
 - **Booklets:** downloaded from `bk.admin.ch` via the `booklet_url` field (`python -m src.hf_dataset`).
-- **Split by voting date**, so all three language versions of a booklet stay on the same side:
-  - **dev** (1,093 pairs) for all design decisions;
-  - **test** (402 pairs, 5 voting dates: 2021-06-13, 2021-09-26, 2022-09-25, 2024-06-09, 2024-09-22), used
-    for before/after measurements (see 6). The two booklets our first version was tuned on are pinned to dev.
-- **Official scorer:** after the Q&A, cases were generated with the starter repo's `prepare_cases.py` (dataset v1.1)
-  and scored with its `evaluate.py` (macro-F1 per task, evidence Hit@5), on the same test split (401 pairs) and on
-  300 random dev pairs; predictions and reports are in `results/official/`. Josip additionally compared configurations
-  on all 1,488 cases per task in five folds grouped by voting date (`docs/competition_optimization_report.md`).
-- **New booklets:** the jury evaluates on booklets outside the dataset. We built 36 claims × 2 tasks on the newest
-  booklet (27 September 2026, all 9 language pairs) to check parsing and accuracy on an unseen layout.
+- **Split by voting date**, so all three language versions of a booklet stay on the same side: **dev** (1,093 pairs,
+  15 dates) and **test** (402 pairs, 5 dates). Test served several before/after decisions, so it is development
+  data by now, not a holdout.
+- **Official scorer:** cases from the starter repo's `prepare_cases.py` (dataset v1.1), scored with its
+  `evaluate.py`. Final measurements run the official CLI on **all 1,488 pairs per task in five folds grouped by
+  voting date** (`scripts/run_decision.py`, which forces the submission settings of `.env.example`), and report
+  per fold, language pair and class, macro-F1 on de-duplicated pairs (38 % of the rows are exact duplicates) and a
+  bootstrap over voting dates. Running the unchanged system twice changes 3 (advanced) / 2 (beginner) of 1,488
+  labels: the endpoint is nearly deterministic, so paired label changes measure the effect of a change.
+- **Holdout on unseen booklets:** the jury evaluates on booklets outside the dataset. We wrote 90 claims (30 per
+  label, 10 per language pair, claim types in the dataset's proportions) on the 27 September 2026 booklets before the
+  system ever ran on them; a second team member checked every label (90/90 agree). It was run once, at the end.
+  (An earlier set of 36 claims on the same booklets was used for two decisions and later lost.)
 
 ---
 
 ## 5. Results
 
-### 5.1 Final configuration — official scorer, test split (401 pairs)
+### 5.1 Final configuration — official CLI and scorer
 
-| Task | Configuration | Macro-F1 | Hit@5 | Input / output tokens | Non-LLM time per case |
+| Evaluation set | Task | Macro-F1 | Hit@5 | Input / output tokens | Apertus time (mean / p95) |
 |---|---|---:|---:|---:|---:|
-| Advanced | 12 pages, whole cited pages (before the Q&A) | 0.945 | 0.341 | 5,598 / 59 | – |
-| Advanced | 8 pages, cited pages in halves + thirds of further pages | 0.930 | 0.727 | 3,877 / 56 | ~5 ms |
-| Advanced | **+ PyMuPDF pages and blocks as evidence, query translation (submission)** | **0.945** | **0.839** | **3,983 / 75** | ~6 ms |
-| Beginner | submission | **0.975** | – | 2,532 / 55 | ~2 ms |
+| **Holdout, unseen booklets** (90 pairs, run once) | Advanced | **0.933–0.944** | **0.833–0.850** | 3,863 / 67 | – |
+| | Beginner | **0.966** | – | 1,758 / 60 | – |
+| **All 1,488 pairs** (5 date folds) | Advanced | **0.943** (folds 0.919–0.977) | **0.869** | 3,866 / 76 | 1.9 s / 3.0 s |
+| | Beginner | **0.984** (folds 0.968–0.990) | – | 1,732 / 62 | 1.1 s / 1.3 s |
+| Former test split (398 pairs) | Advanced / Beginner | 0.942 / 0.982 | 0.833 | 3,979 / 1,741 input | – |
 
-On the newest booklet (not in the dataset, 36 claims) the submission reaches 0.77–0.80 (advanced, run to run) and
-0.970 (beginner); all advanced errors there are cross-lingual, mostly confident Neutral answers with the gold page in
-the context. Josip's comparison on all 1,488 advanced cases (k=12): baseline 0.948 / Hit@5 0.47, with PyMuPDF evidence
-0.944 / 0.76, with query translation (R2) **0.956 / 0.77**.
+The holdout's advanced range comes from two runs with identical settings (one label differs). Its errors are
+cross-lingual (de→fr, fr→de). Earlier milestones on the test split: 12 pages with whole cited pages 0.945 / Hit@5
+0.341 at 5,598 tokens; 8 pages 0.930 / 0.727 at 3,877; + PyMuPDF evidence and query translation 0.945 / 0.839.
+Josip's comparison on all 1,488 advanced cases (k=12): baseline 0.948 / Hit@5 0.47, with query translation (R2)
+0.956 / 0.77.
 
 ### 5.2 Full document vs. selected context (advanced, same 150 test pairs)
 
@@ -229,9 +242,16 @@ The full booklet (up to ~70k tokens) is both the most expensive and the least ac
 | Retrieval with claim + translation (`union`, paired real runs) | dev 300 0.934 → 0.944, test 0.930 → 0.945, all 1,488 0.948 → 0.956; ~3 % more tokens | adopted |
 | Answer constrained by a JSON schema (`response_format`) | dev 150 0.933 → 0.833, Hit@5 0.78 → 0.69; no unparseable answer to fix (0 in > 4,000) | rejected |
 | Drop low-value pages from the context (tables of contents, short pages, voting text) | dev 300 0.927 → 0.917 / 0.910, no gain on the new booklet | rejected |
+| *Paired runs on all 1,488 pairs per task (5 date folds; unchanged system run twice: 3 / 2 labels change):* | | |
+| E1: at most 2 legal-text pages, freed places refilled | A 0.943 → 0.937 (11 fixed / 19 broken); legal-text claims lose context; −3 % tokens | rejected |
+| E2: beginner references > 6,000 chars cut to the matching passages | B 0.981 → 0.984, −30 % input tokens; holdout 0.955 → 0.966 | adopted |
+| E3: page windows of 2,000 instead of 3,000 characters | A 0.943 → 0.934 (6 / 18), all classes worse; −9 % tokens | rejected |
+| E4: evidence blocks ranked with the claim and its translation (offline replay) | Hit@5 0.869 → 0.873, not consistent across folds | rejected |
 
-Full tables: [docs/experiments.md](docs/experiments.md). Runs on 150 pairs carry about ±3 F1 points of sampling
-noise; close decisions were re-run on 450 pairs.
+Full tables: [docs/experiments.md](docs/experiments.md) and [docs/independent_experiments.md](docs/independent_experiments.md).
+Runs on 150 pairs carry about ±3 F1 points of sampling noise; close decisions were re-run on 450 pairs, the last
+ones on all pairs. A proxy measured without the model (is the gold page in the context, is the gold text still
+visible) predicted gains for E1 and E3 that the real runs did not show.
 
 ### 5.4 What we learned about Apertus
 
@@ -254,15 +274,18 @@ noise; close decisions were re-run on 450 pairs.
 
 ## 6. Limitations
 
-- **Remaining errors** (81 over all 1,495 pairs, 12 pages): Entailment → Contradiction 35, Contradiction → Neutral 22,
-  Contradiction → Entailment 11, Entailment → Neutral 8; in nearly all of them the gold page is in the context.
-- **Evidence:** Hit@5 is 0.84 on test; most misses cite another page with the same fact than the annotated one.
-- **Unseen booklets:** on the newest booklet the advanced task reaches ~0.80; the errors are cross-lingual claims that
-  Apertus judges Neutral although the gold page is in the context. Fewer pages or translating the NLI claim did not
-  help overall.
+- **Remaining errors** (advanced, 85 of 1,488 pairs): Entailment → Contradiction 34, Entailment → Neutral 20,
+  Contradiction → Neutral 19, Contradiction → Entailment 8, Neutral → Contradiction 3. Missing information is rarely
+  read as a contradiction. Claims about the consequences of a yes fail most often (15.5 %, against 3.6 % in the
+  beginner task, where the passage is given): their errors are mostly page selection.
+- **Evidence:** Hit@5 is 0.87 on all pairs. Of the 130 misses, 55 cite another page than the annotated one, 39 are
+  Neutral predictions (no evidence) and 36 cite the gold page without a matching item among the first five.
+- **Unseen booklets:** the holdout (0.93–0.94 advanced, 0.966 beginner) covers one vote with two proposals and 90
+  claims written by us (± ~0.05); its errors are cross-lingual advanced claims. The jury's set may differ in layout
+  and claim style.
 - **License:** the evidence quotes need PyMuPDF (AGPL-3.0), so the image as a whole is distributed under the AGPL.
-- **Test split:** it served for several before/after decisions, so it is no longer an untouched holdout; the new
-  booklet set above is the only data never used for a decision.
+- **Development data:** all 20 dates of the dataset, including the former test split, have been used for decisions;
+  only the holdout was not.
 - **Layout:** committee pages headed only by a slogan stay unlabelled; tables and charts are read as plain text.
 - **Processing time and tokens** are measured by the organisers' proxy; our own numbers are estimates (client-side
   token counts, in-flight clock). Booklets outside the 60 dataset booklets are parsed at run time (in parallel).
@@ -279,18 +302,23 @@ docker run --rm -e BASE_URL -e API_KEY -v "$PWD/cases:/data:ro" -v "$PWD/output:
 make test                                                      # unit tests, no API calls
 ```
 
-Cases come from the starter repo's `prepare_cases.py` and are scored with its `evaluate.py`; our runs are in
-`results/official/`. Temperature 0, so repeated runs differ by a few pairs.
+Cases come from the starter repo's `prepare_cases.py` (or `scripts/prepare_competition_cases.py` for all pairs with
+date folds, `scripts/build_holdout.py` for the holdout) and are scored with its `evaluate.py`. `scripts/run_decision.py`
+runs the submission configuration through the official CLI and keeps predictions, scores and settings in
+`results/generalization/`; `scripts/report_decision.py` compares two runs. Repeated runs differ by a few pairs.
 
-Settings (environment, defaults): `NLI_TOP_K` (`8`), `PAGE_MAX_CHARS` (`3000`), `PROMPT_MODE` (`ids`),
-`RETRIEVAL_QUERY_MODE` (`union`), `EVIDENCE_POLICY` (`raw_pages_and_blocks`), `NLI_WORKERS` (`4`); all in `src/config.py`.
+Settings: `.env.example` lists every setting with its default (a test keeps it equal to `src/config.py`), among them
+`NLI_TOP_K` (`8`), `PAGE_MAX_CHARS` (`3000`), `PROMPT_MODE` (`ids`), `RETRIEVAL_QUERY_MODE` (`union`),
+`EVIDENCE_POLICY` (`raw_pages_and_blocks`), `REFERENCE_MAX_CHARS` (`6000`), `NLI_WORKERS` (`4`).
 
 ---
 
 ## 8. Next steps
 
-1. The remaining Entailment → Contradiction errors and the cross-lingual Neutral errors on unseen booklets, both
-   with the gold page in the context; reasoning at lower cost (thinking: +0.02 F1 at ~11× latency).
+1. The remaining Entailment → Contradiction errors (34 of 85 advanced errors) and the cross-lingual errors on unseen
+   booklets, both mostly with the gold page in the context; reasoning at lower cost (thinking: +0.02 F1 at ~11×
+   latency).
+2. A larger holdout over several new votes, labelled independently, to narrow the ± 0.05 on unseen booklets.
 
 ---
 

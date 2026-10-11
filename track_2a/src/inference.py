@@ -102,6 +102,7 @@ _PARSE_CACHE_VERSION = 7  # bump when parsing or section detection changes (7: P
 
 _COMMITTEE_SECTION = "Arguments of the initiative/referendum committee"
 _FEDERAL_COUNCIL_SECTION = "Arguments of the Federal Council and Parliament"
+_LEGAL_TEXT_SECTION = "Voting text (legal text)"
 _COMMITTEE_RE = re.compile(
     r"komitee|initiant|urheber|comit[eé]|auteurs de l.initiative|comitato|promotori", re.IGNORECASE)
 _FEDERAL_COUNCIL_RE = re.compile(
@@ -293,6 +294,40 @@ class ClaimVerificationEngine:
                 _GLOBAL_BOOKLET_CACHE[key] = {**parsed, "retriever": PassageRetriever(parsed["paragraphs"])}
         return _GLOBAL_BOOKLET_CACHE[key]
 
+    def _translate_query(self, claim: str, language: str, target_language: str):
+        """The claim translated into the source language for lexical retrieval only (None if rejected or failed),
+        the (prompt, completion) tokens it cost, and the cache receipt."""
+        from src.query_translation import QueryTranslator
+        with self._source_pages_lock:
+            if self._query_translator is None:
+                self._query_translator = QueryTranslator(self.client, config.QUERY_TRANSLATION_CACHE_DIR)
+        translated, prompt_tokens, completion_tokens, receipt = self._query_translator.get(claim, language, target_language)
+        return translated, (prompt_tokens, completion_tokens), receipt
+
+    def _focus_reference(self, chunks: List[str], claim: str, claim_language: Optional[str]):
+        """
+        Task B, reference longer than REFERENCE_MAX_CHARS: its first chunk (title, opening) plus the chunks that best
+        match the claim, in document order, up to REFERENCE_MAX_CHARS characters. Ranked like the booklet pages: BM25
+        with the claim and, for a claim in another language, its translation (RETRIEVAL_QUERY_MODE != 'original').
+        Returns (chunks, translation token usage).
+        """
+        queries, usage = [claim], (0, 0)
+        reference_language = guess_language(" ".join(chunks[:3]))
+        language = claim_language or guess_language(claim)
+        if config.RETRIEVAL_QUERY_MODE != "original" and language != reference_language:
+            translated, usage, _ = self._translate_query(claim, language, reference_language)
+            if translated:
+                queries.append(translated)
+        ranked = PassageRetriever([{"text": c, "index": i} for i, c in enumerate(chunks)]).retrieve_hybrid(
+            queries[0], top_k=len(chunks), query_variants=queries[1:])
+        keep, used = {0}, len(chunks[0])
+        for p in ranked:
+            i = p["index"]
+            if i not in keep and used + len(chunks[i]) <= config.REFERENCE_MAX_CHARS:
+                keep.add(i)
+                used += len(chunks[i])
+        return [chunks[i] for i in sorted(keep)], usage
+
     def _finalize_evidence(self, result, vote=None):
         if config.EVIDENCE_POLICY == "legacy" or result.strategy == "direct_reference" or result.error:
             return result
@@ -347,12 +382,7 @@ class ClaimVerificationEngine:
             query_metadata = {'mode': config.RETRIEVAL_QUERY_MODE, 'claim_language': language,
                               'booklet_language': source_language, 'translation_used': False}
             if language != source_language:
-                from src.query_translation import QueryTranslator
-                with self._source_pages_lock:
-                    if self._query_translator is None:
-                        self._query_translator = QueryTranslator(self.client, config.QUERY_TRANSLATION_CACHE_DIR)
-                translated, prompt_tokens, completion_tokens, receipt = self._query_translator.get(claim, language, source_language)
-                translation_usage = prompt_tokens, completion_tokens
+                translated, translation_usage, receipt = self._translate_query(claim, language, source_language)
                 query_metadata.update(receipt)
                 if translated:
                     query_metadata['translation_used'] = True
@@ -377,6 +407,7 @@ class ClaimVerificationEngine:
                     exclude_sections=opposing_sections(claim) if config.SPEAKER_AWARE else None,
                     ensure_sections={side: config.SPEAKER_BOOST}
                     if config.SPEAKER_BOOST and (side := attributed_section(claim)) else None,
+                    section_caps={_LEGAL_TEXT_SECTION: config.LEGAL_TEXT_MAX_PAGES} if config.LEGAL_TEXT_MAX_PAGES else None,
                 )
             else:
                 candidate_paras = retriever.retrieve(claim, top_k=top_k, target_vote=vote)
@@ -533,8 +564,11 @@ class ClaimVerificationEngine:
         numerical_conflict_msg = num_conflict.explanation if num_conflict else None
 
         if self.prompt_mode in ("compact", "ids"):
-            chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in chunk_reference(reference)]
-            return self._compact_predict(
+            texts, usage = chunk_reference(reference), (0, 0)
+            if config.REFERENCE_MAX_CHARS and len(reference) > config.REFERENCE_MAX_CHARS:
+                texts, usage = self._focus_reference(texts, claim, claim_language)
+            chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in texts]
+            result = self._compact_predict(
                 passages=chunks,
                 claim=claim,
                 claim_language=claim_language,
@@ -544,6 +578,10 @@ class ClaimVerificationEngine:
                 booklet_path="supplied_reference",
                 numerical_conflict_msg=numerical_conflict_msg,
             )
+            result.tokens_prompt += usage[0]
+            result.tokens_completion += usage[1]
+            result.tokens_total += sum(usage)
+            return result
 
         # 2. Apertus Model Inference over premise text
         nli_output = self.client.infer(
