@@ -2,7 +2,7 @@
 
 - **Track:** Track 2A — OST: Multilingual Natural Language Inference over Swiss Official Voting Booklets
 - **Event:** Hack Apertus Online (October 1–16, 2026)
-- **Team:** Team Fact Attack 2026 — Josip Jukic, Felipe Wüthrich
+- **Team:** Team Fact Attack 2026 — Josip Jukic, Felipe Wüthrich, Sheyla Sampietro, Andrea Petretta
 - **Repository:** [GitHub](https://github.com/JJukic/Apertus-Team-Fact-Attack-2026) · **Experiment log:** [docs/experiments.md](docs/experiments.md)
 - **Demo:** Streamlit app (`make web`: claim check with highlighted evidence pages, benchmark dashboard) and the
   entailment CLI (`python -m src --input cases.jsonl --output predictions.jsonl`, the Docker image's entrypoint, see 2.5)
