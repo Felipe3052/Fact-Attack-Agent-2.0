@@ -288,3 +288,16 @@ with `scripts/run_decision.py` (`results/generalization/HO_baseline`, `HO_E2_ref
   lost September set is not reproduced on this one. Weakest on the holdout: cross-language task A pairs
   (de→fr 0.60–0.85, fr→de 0.79); all errors stay within a few cases per pair.
 - From now on this holdout is spent: it is reported, not used for further decisions.
+
+## 5. Final image check with the real API (2026-10-11)
+
+Image built from commit `59b55cd` (`docker build --platform linux/amd64`, 60/60 dataset booklets pre-parsed).
+- Test suite in the container, `--network none --read-only --tmpfs /tmp`: 143 tests pass.
+- Jury-style run against the real Apertus endpoint (`--input /data/cases.jsonl --output /output/predictions.jsonl`,
+  `/data` read-only, `BASE_URL` / `API_KEY` injected): 27 mixed cases — 9 advanced cases on booklets in the image
+  (all 9 language pairs), 6 on the new 27 September 2026 booklets (parsed at run time), 12 beginner cases (7 with
+  references over 6,000 characters). Exit code 0, 27/27 answered in input order, no warnings, valid labels, evidence
+  pages 1-based for advanced and `null` for beginner, token metrics present; CLI estimate 15 ms non-LLM time per
+  case including start-up and the three new booklets. E2 is active in the image: long references cost
+  2,100–2,500 input tokens per case. Official `evaluate.py`: advanced 15/15 correct, Hit@5 6/7; beginner 11/12
+  (macro-F1 0.896 on 12 cases); both above the minimum thresholds. This is a contract check, not a quality estimate.
