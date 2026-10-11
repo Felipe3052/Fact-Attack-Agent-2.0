@@ -7,8 +7,8 @@ RUN pip install --no-cache-dir -r /app/requirements-lock.txt
 COPY track_2a/src /app/src
 COPY track_2a/vendor /app/vendor
 COPY track_2a/tests /app/tests
-# The submission configuration written out (no secrets); a test checks it against the code defaults in the image
-COPY track_2a/configs /app/configs
+# All pipeline settings with their defaults (no secrets); a test checks them against the code in the image
+COPY track_2a/.env.example /app/.env.example
 COPY track_2a/scripts /app/scripts
 COPY track_2a/data/booklets /app/data/booklets
 # Source-only demo inputs: the development dataset's gold labels stay outside

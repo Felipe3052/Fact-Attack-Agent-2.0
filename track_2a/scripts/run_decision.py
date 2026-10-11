@@ -1,6 +1,7 @@
 """Run one decision run exactly as the jury runs the submission, and keep everything needed to check it later.
 
-- Configuration: configs/submission.env plus explicit --set overrides. Every stated variable is forced into the
+- Configuration: the settings of .env.example (the submission defaults; endpoint, key and cache paths excluded) plus
+  explicit --set overrides. Every stated variable is forced into the
   environment, so a developer's .env (e.g. NLI_STRATEGY=retrieval, an 8B model) cannot change the run; the
   effective src.config values are recorded and must equal what was asked for.
 - Inference: the official call `python -m src --input ... --output ...` in a subprocess (no gold anywhere near it).
@@ -25,7 +26,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from tests.test_submission_config import ATTRIBUTES, read_env_file, same  # noqa: E402
+from tests.test_submission_config import ATTRIBUTES, same, submission_settings  # noqa: E402
 
 
 def digest(raw):
@@ -75,7 +76,7 @@ def main():
     data = args.data.resolve()
     folder = subset(data, args.task, args.limit)
 
-    wanted = read_env_file(ROOT / "configs" / "submission.env")
+    wanted = submission_settings()
     for item in args.set:
         key, value = item.split("=", 1)
         wanted[key.strip()] = value.strip()
@@ -107,7 +108,7 @@ def main():
                 "python": sys.version.split()[0], "gold_read_during_inference": False}
     (out / "run.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     if dirty.strip():  # uncommitted source changes: keep the exact diff against the recorded commit
-        diff = subprocess.run(["git", "diff", "HEAD", "--", "src", "configs"], cwd=ROOT, capture_output=True, text=True).stdout
+        diff = subprocess.run(["git", "diff", "HEAD", "--", "src", ".env.example"], cwd=ROOT, capture_output=True, text=True).stdout
         (out / "src.diff").write_text(diff, encoding="utf-8")
 
     started = time.time()

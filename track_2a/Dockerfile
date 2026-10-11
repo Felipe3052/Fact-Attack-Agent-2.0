@@ -7,8 +7,8 @@ RUN pip install --no-cache-dir -r /app/requirements-lock.txt
 COPY src /app/src
 COPY vendor /app/vendor
 COPY tests /app/tests
-# The submission configuration written out (no secrets); a test checks it against the code defaults in the image
-COPY configs /app/configs
+# All pipeline settings with their defaults (no secrets); a test checks them against the code in the image
+COPY .env.example /app/.env.example
 COPY scripts /app/scripts
 COPY data/booklets /app/data/booklets
 COPY data/demo_cases.jsonl /app/data/demo_dataset.jsonl

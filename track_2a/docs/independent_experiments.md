@@ -40,13 +40,13 @@ serve as inspiration only; no code, prompt or pipeline of another team is used.
 ## 2. Reproducibility of the submission configuration (E0)
 
 - The Docker image sets none of the pipeline variables, so the **submission runs on the defaults of
-  `src/config.py`**. `configs/submission.env` now states them explicitly; `tests/test_submission_config.py`
-  checks that file and code agree.
+  `src/config.py`**. `.env.example` (repository root and `track_2a/`, kept identical) now lists every setting
+  with that default; `tests/test_submission_config.py` checks file and code agree, also inside the image.
 - **Local discrepancy found:** the developer `.env` files (not in git, excluded from the image) set
   `NLI_STRATEGY=retrieval` (the old proposal filter) and, in `track_2a/.env`, `LLM_NAME=swiss-ai/Apertus-v1.5-8B`.
   Any local run from `track_2a/` that relied on them measured a different system than the submission
   (one unit test also failed because of it). The image is not affected (`.dockerignore` excludes `.env`).
-- **Decision runs** use `scripts/run_decision.py`: it forces `configs/submission.env` (+ explicit overrides),
+- **Decision runs** use `scripts/run_decision.py`: it forces the settings of `.env.example` (+ explicit overrides),
   checks the effective configuration, calls the official CLI exactly as the jury does
   (`python -m src --input … --output …`), scores with the vendored official `evaluate.py`, and saves predictions,
   official score, per-fold/language/class metrics, the run manifest (commit, source hashes, settings, CLI timing,
@@ -61,11 +61,13 @@ serve as inspiration only; no code, prompt or pipeline of another team is used.
 |---|---|---|---|
 | E0 | 2026-10-11 | Baseline of the exact submission configuration on all 2,976 cases | done (reference) |
 | E1 | 2026-10-11 | Fewer legal-text pages let the explanation pages into the context (task A) | **rejected** |
-| E2 | 2026-10-11 | Task B: a long reference can be cut to its relevant chunks without losing quality | **adopt** (pending noise floor + holdout) |
+| E2 | 2026-10-11 | Task B: a long reference can be cut to its relevant chunks without losing quality | **adopt** (pending holdout) |
+| E3 | 2026-10-11 | Task A: tighter page windows (2,000 instead of 3,000 characters) save tokens at equal quality | running |
 
 ### E0 — baseline (`results/generalization/B0_submission`)
 
-Commit `3bf73bd`, unchanged sources, `configs/submission.env`, official CLI, 4 workers, booklet parses cached
+Commit `3bf73bd`, unchanged sources, submission defaults (then written out in `configs/submission.env`, now in
+`.env.example` with the same values), official CLI, 4 workers, booklet parses cached
 (as in the image), translations acquired cold. 2,976 cases, 0 failed cases, 0 API failures.
 
 | Task | Macro-F1 | Fold mean ± sd (min–max) | Cross-language F1 | Hit@5 | Input / output tokens per case |
@@ -203,3 +205,16 @@ refactoring for E1/E2 does not change the behaviour while their flags are off.
 |---|---|---|---|---|
 | Voting NLI, `Rashad18236/hackapertus-voting-nli` (technical report, README) | `42b2a3c` | 2026-10-11 | Apache-2.0 | inspiration for E1 analysis and E2 |
 | Apertus Evidence Lab, `hallzyx/apertus` (technical report, README) | `d28c058` | 2026-10-11 | Apache-2.0 | retrieval as separate bottleneck; trained head not applicable (needs hidden states, our endpoint is chat completions only) |
+
+### E3 — task A: tighter page windows
+
+- **Bottleneck:** task A sends ~3,866 input tokens per case, mostly the 8 selected pages (~11,300 characters after
+  the existing 3,000-character window per page); tokens are scored relative to the most frugal team.
+- **Hypothesis:** a 2,000-character window per page (the window that best matches claim and vote title, as today)
+  keeps the information the model needs while sending fewer tokens. E1 showed that removing whole pages removes
+  needed context, so this experiment keeps all 8 pages and only narrows each one. One variable: `PAGE_MAX_CHARS`.
+- **Offline estimate (written down before the API run):** context −11 % (≈ −8 % input tokens with the prompt),
+  pages narrowed 9.6 % → 23.8 %, share of gold-passage words still visible on gold pages 0.997 → 0.968
+  (16 of 734 cases lose more than 20 %). 1,500 characters would save −26 % but lose more than 20 % of the gold
+  words in 282 of 734 cases and is not tested. Evidence is built from the full page and is not narrowed.
+- **Provenance:** own analysis; no external source.
