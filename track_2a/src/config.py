@@ -94,12 +94,14 @@ SPEAKER_AWARE = os.getenv("SPEAKER_AWARE", "false").lower() in ("true", "1", "ye
 # 0.888 -> 0.985 with N=2 on all 1,495 pairs; macro-F1 0.931 -> 0.940 (22 fixed / 8 broken), no extra tokens
 SPEAKER_BOOST = int(os.getenv("SPEAKER_BOOST", "2"))
 # At most this many pages of the voting (legal) text among the retrieved pages (0 = no limit). The legal text repeats
-# the vote title, so its pages often push the explanation pages out of the top k (experiment E1, 2026-10-11)
+# the vote title, so its pages often push the explanation pages out of the top k (experiment E1, 2026-10-11: rejected,
+# claims about the legal text lose context)
 LEGAL_TEXT_MAX_PAGES = int(os.getenv("LEGAL_TEXT_MAX_PAGES", "0"))
 # Task B: a reference longer than this many characters is sent as its first chunk plus the chunks that best match the
 # claim (BM25 with the claim and, if the languages differ, its translation), in document order, up to this budget
-# (0 = always the whole reference; experiment E2, 2026-10-11)
-REFERENCE_MAX_CHARS = int(os.getenv("REFERENCE_MAX_CHARS", "0"))
+# (0 = always the whole reference). Experiment E2: all 1,488 task B cases macro-F1 0.981 -> 0.984 at -30 % input
+# tokens; untouched holdout (27 Sep 2026 booklets, 90 claims) 0.955 -> 0.966 at -13 %
+REFERENCE_MAX_CHARS = int(os.getenv("REFERENCE_MAX_CHARS", "6000"))
 # Speaker hint: tell the model which passages are the named side's own text
 SPEAKER_HINT = os.getenv("SPEAKER_HINT", "false").lower() in ("true", "1", "yes")
 

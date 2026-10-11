@@ -61,7 +61,7 @@ serve as inspiration only; no code, prompt or pipeline of another team is used.
 |---|---|---|---|
 | E0 | 2026-10-11 | Baseline of the exact submission configuration on all 2,976 cases | done (reference) |
 | E1 | 2026-10-11 | Fewer legal-text pages let the explanation pages into the context (task A) | **rejected** |
-| E2 | 2026-10-11 | Task B: a long reference can be cut to its relevant chunks without losing quality | **adopt** (pending holdout) |
+| E2 | 2026-10-11 | Task B: a long reference can be cut to its relevant chunks without losing quality | **adopted** (default since the holdout check) |
 | E3 | 2026-10-11 | Task A: tighter page windows (2,000 instead of 3,000 characters) save tokens at equal quality | **rejected** |
 | E4 | 2026-10-11 | Task A evidence: rank text blocks with the claim and its translation | **not adopted** (offline replay) |
 
@@ -250,3 +250,41 @@ refactoring for E1/E2 does not change the behaviour while their flags are off.
   in task A the expected effect is negligible. The remaining evidence headroom lies in which page the model cites
   and in neutral predictions, not in block ranking.
 - **Provenance:** own analysis; no external source.
+
+### Label check of the holdout (2026-10-11)
+
+- Felipe Wüthrich checked the 90 holdout claims on a review page: German translation of every French/Italian
+  claim, the booklet part the claim names with a link to the page of the German booklet, and an option to hide the
+  author's label and basis until his own judgement.
+- **90 of 90 agree** (entailment 30, neutral 30, contradiction 30; Cohen's kappa 1.0); the judgement on claim 8
+  (neutral) was not saved on the page and was confirmed in chat. Three notes, none asking for a change. No label
+  was changed.
+- Limits: the reviewer had the claims file with the labels open before the review, so the check may not be
+  fully blind; translations are reading aids, the claims are judged in their original language.
+  Judgements: `data/holdout_2026-09-27/review_felipe.jsonl`.
+
+## 4. Final check on the untouched holdout (2026-10-11, run once)
+
+Both configurations on the 27 September 2026 holdout (90 claims × task A/B, labels checked 90/90), each run once
+with `scripts/run_decision.py` (`results/generalization/HO_baseline`, `HO_E2_reference_6000`; reports in
+`HO_E2_reference_6000/report_A|B`). 0 failed cases.
+
+| | Baseline | Baseline + E2 |
+|---|---:|---:|
+| Task A macro-F1 (identical configuration in both runs) | 0.933 | 0.944 |
+| Task A evidence Hit@5 | 0.833 | 0.850 |
+| Task A input tokens / case | 3,883 | 3,863 |
+| **Task B macro-F1** | 0.955 | **0.966** |
+| Task B cross-language macro-F1 | 0.967 | 0.983 |
+| **Task B input / output tokens per case** | 2,027 / 55 | **1,758 / 60** (−13 % input) |
+
+- **E2 confirmed:** task B 1 label fixed, 0 broken, no language pair worse; the saving is smaller than on the
+  dataset (−13 % vs −30 %) because the holdout's references are shorter. **E2 is now the default**
+  (`REFERENCE_MAX_CHARS=6000` in `src/config.py` and `.env.example`).
+- Task A ran with the same settings twice; its one changed label (claim 73) is run-to-run variation, consistent
+  with the noise floor measured on the dataset.
+- **Generalisation estimate on unseen booklets:** task A ≈ 0.93–0.94 (Hit@5 0.83–0.85), task B ≈ 0.96 — close to
+  the development population (0.943 / 0.869 / 0.981–0.984), with ± ~0.05 at n = 90. The earlier 0.77–0.80 on the
+  lost September set is not reproduced on this one. Weakest on the holdout: cross-language task A pairs
+  (de→fr 0.60–0.85, fr→de 0.79); all errors stay within a few cases per pair.
+- From now on this holdout is spent: it is reported, not used for further decisions.
