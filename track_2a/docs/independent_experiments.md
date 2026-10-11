@@ -62,7 +62,8 @@ serve as inspiration only; no code, prompt or pipeline of another team is used.
 | E0 | 2026-10-11 | Baseline of the exact submission configuration on all 2,976 cases | done (reference) |
 | E1 | 2026-10-11 | Fewer legal-text pages let the explanation pages into the context (task A) | **rejected** |
 | E2 | 2026-10-11 | Task B: a long reference can be cut to its relevant chunks without losing quality | **adopt** (pending holdout) |
-| E3 | 2026-10-11 | Task A: tighter page windows (2,000 instead of 3,000 characters) save tokens at equal quality | running |
+| E3 | 2026-10-11 | Task A: tighter page windows (2,000 instead of 3,000 characters) save tokens at equal quality | **rejected** |
+| E4 | 2026-10-11 | Task A evidence: rank text blocks with the claim and its translation | **not adopted** (offline replay) |
 
 ### E0 — baseline (`results/generalization/B0_submission`)
 
@@ -217,4 +218,35 @@ refactoring for E1/E2 does not change the behaviour while their flags are off.
   pages narrowed 9.6 % → 23.8 %, share of gold-passage words still visible on gold pages 0.997 → 0.968
   (16 of 734 cases lose more than 20 %). 1,500 characters would save −26 % but lose more than 20 % of the gold
   words in 282 of 734 cases and is not tested. Evidence is built from the full page and is not narrowed.
+- **Provenance:** own analysis; no external source.
+- **Result** (`results/generalization/E3_page_clip2000`, `PAGE_MAX_CHARS=2000`, task A, 1,488 cases, 0 failed
+  cases; full report in `report/report.md`):
+
+  | | Baseline E0 | E3 | Change |
+  |---|---:|---:|---:|
+  | Macro-F1 | 0.943 | 0.934 | −0.008 (95 % date bootstrap −0.014 … −0.002) |
+  | Macro-F1, cross-language | 0.943 | 0.933 | −0.010 |
+  | Evidence Hit@5 | 0.869 | 0.864 | −0.005 |
+  | Input tokens / case | 3,866 | 3,514 | −9.1 % |
+  | Folds / language pairs worse | – | 3 of 5 / 5 of 9 | |
+
+  Labels fixed / broken 6 / 18 against 3 / 0 for the repeated baseline; all three classes lose F1.
+- **Decision: rejected.** The whole interval of the F1 change is negative, and the loss is spread over folds,
+  language pairs and classes. As in E1, the offline proxy (gold words still visible: 0.968) did not predict the
+  loss: the model also uses the text around the gold passage. Further cuts of the task A context are not pursued.
+
+### E4 — evidence blocks ranked in the booklet language (offline replay, no API)
+
+- **Bottleneck:** Hit@5 misses of E0 (130 of 990 gold entailment/contradiction cases): 55 cite pages other than the
+  gold pages, 39 are predicted neutral (no evidence), 36 cite a gold page but no matching item is among the first
+  five. Block ranking uses only the original claim's terms, which barely match for cross-language claims.
+- **Hypothesis:** adding the terms of the claim's translation (already computed for retrieval, no extra tokens)
+  ranks the right blocks of the cited pages higher.
+- **Method:** the evidence of E0 was rebuilt from its cited pages; the control (current ranking) reproduces the
+  submitted evidence exactly in 951/951 cases, translations come from E0's cache (no API call possible).
+- **Result:** Hit@5 0.869 → 0.873 (9 hits gained / 5 lost), fold 1 −0.010, it→de −0.037, cross-language
+  0.856 → 0.863.
+- **Decision: not adopted.** +4 cases of 990 and not consistent across folds and language pairs; at 20 % weight
+  in task A the expected effect is negligible. The remaining evidence headroom lies in which page the model cites
+  and in neutral predictions, not in block ranking.
 - **Provenance:** own analysis; no external source.
