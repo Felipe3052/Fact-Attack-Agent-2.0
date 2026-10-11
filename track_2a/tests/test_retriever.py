@@ -83,3 +83,15 @@ class TestEnsureSections(unittest.TestCase):
         self.assertFalse(any(p["section"] == "COM" for p in plain))
         self.assertEqual(sum(p["section"] == "COM" for p in boosted), 2)
         self.assertEqual([p["page_number"] for p in boosted[:2]], [p["page_number"] for p in plain[:2]])
+
+    def test_section_cap_keeps_at_most_n_pages_and_the_context_size(self):
+        # pages 0-3 are legal text and rank highest; the cap lets the next-ranked other pages in
+        paras = [{"id": i, "page_number": i, "proposal_id": 1, "section": "LEGAL" if i < 4 else None,
+                  "text": ("Mieten Kündigung Eigenbedarf " * (10 - i)) + f"Seite {i} Text"} for i in range(10)]
+        retriever = PassageRetriever(paras)
+        plain = retriever.retrieve_hybrid("Mieten Kündigung Eigenbedarf", top_k=5)
+        capped = retriever.retrieve_hybrid("Mieten Kündigung Eigenbedarf", top_k=5, section_caps={"LEGAL": 2})
+        self.assertEqual([p["page_number"] for p in plain], [0, 1, 2, 3, 4])
+        self.assertEqual([p["page_number"] for p in capped], [0, 1, 4, 5, 6])
+        # a cap that is not reached changes nothing
+        self.assertEqual(retriever.retrieve_hybrid("Mieten Kündigung Eigenbedarf", top_k=5, section_caps={"LEGAL": 9}), plain)

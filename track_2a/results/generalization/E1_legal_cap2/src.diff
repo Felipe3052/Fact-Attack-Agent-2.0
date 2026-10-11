@@ -1,0 +1,150 @@
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index 54760e8..d3afa52 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -93,6 +93,13 @@ SPEAKER_AWARE = os.getenv("SPEAKER_AWARE", "false").lower() in ("true", "1", "ye
+ # (replacing the lowest-ranked other pages, so the page count stays NLI_TOP_K). Gold recall of committee claims
+ # 0.888 -> 0.985 with N=2 on all 1,495 pairs; macro-F1 0.931 -> 0.940 (22 fixed / 8 broken), no extra tokens
+ SPEAKER_BOOST = int(os.getenv("SPEAKER_BOOST", "2"))
++# At most this many pages of the voting (legal) text among the retrieved pages (0 = no limit). The legal text repeats
++# the vote title, so its pages often push the explanation pages out of the top k (experiment E1, 2026-10-11)
++LEGAL_TEXT_MAX_PAGES = int(os.getenv("LEGAL_TEXT_MAX_PAGES", "0"))
++# Task B: a reference longer than this many characters is sent as its first chunk plus the chunks that best match the
++# claim (BM25 with the claim and, if the languages differ, its translation), in document order, up to this budget
++# (0 = always the whole reference; experiment E2, 2026-10-11)
++REFERENCE_MAX_CHARS = int(os.getenv("REFERENCE_MAX_CHARS", "0"))
+ # Speaker hint: tell the model which passages are the named side's own text
+ SPEAKER_HINT = os.getenv("SPEAKER_HINT", "false").lower() in ("true", "1", "yes")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index 2313a10..8f038f9 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -102,6 +102,7 @@ _PARSE_CACHE_VERSION = 7  # bump when parsing or section detection changes (7: P
+ 
+ _COMMITTEE_SECTION = "Arguments of the initiative/referendum committee"
+ _FEDERAL_COUNCIL_SECTION = "Arguments of the Federal Council and Parliament"
++_LEGAL_TEXT_SECTION = "Voting text (legal text)"
+ _COMMITTEE_RE = re.compile(
+     r"komitee|initiant|urheber|comit[eé]|auteurs de l.initiative|comitato|promotori", re.IGNORECASE)
+ _FEDERAL_COUNCIL_RE = re.compile(
+@@ -293,6 +294,40 @@ class ClaimVerificationEngine:
+                 _GLOBAL_BOOKLET_CACHE[key] = {**parsed, "retriever": PassageRetriever(parsed["paragraphs"])}
+         return _GLOBAL_BOOKLET_CACHE[key]
+ 
++    def _translate_query(self, claim: str, language: str, target_language: str):
++        """The claim translated into the source language for lexical retrieval only (None if rejected or failed),
++        the (prompt, completion) tokens it cost, and the cache receipt."""
++        from src.query_translation import QueryTranslator
++        with self._source_pages_lock:
++            if self._query_translator is None:
++                self._query_translator = QueryTranslator(self.client, config.QUERY_TRANSLATION_CACHE_DIR)
++        translated, prompt_tokens, completion_tokens, receipt = self._query_translator.get(claim, language, target_language)
++        return translated, (prompt_tokens, completion_tokens), receipt
++
++    def _focus_reference(self, chunks: List[str], claim: str, claim_language: Optional[str]):
++        """
++        Task B, reference longer than REFERENCE_MAX_CHARS: its first chunk (title, opening) plus the chunks that best
++        match the claim, in document order, up to REFERENCE_MAX_CHARS characters. Ranked like the booklet pages: BM25
++        with the claim and, for a claim in another language, its translation (RETRIEVAL_QUERY_MODE != 'original').
++        Returns (chunks, translation token usage).
++        """
++        queries, usage = [claim], (0, 0)
++        reference_language = guess_language(" ".join(chunks[:3]))
++        language = claim_language or guess_language(claim)
++        if config.RETRIEVAL_QUERY_MODE != "original" and language != reference_language:
++            translated, usage, _ = self._translate_query(claim, language, reference_language)
++            if translated:
++                queries.append(translated)
++        ranked = PassageRetriever([{"text": c, "index": i} for i, c in enumerate(chunks)]).retrieve_hybrid(
++            queries[0], top_k=len(chunks), query_variants=queries[1:])
++        keep, used = {0}, len(chunks[0])
++        for p in ranked:
++            i = p["index"]
++            if i not in keep and used + len(chunks[i]) <= config.REFERENCE_MAX_CHARS:
++                keep.add(i)
++                used += len(chunks[i])
++        return [chunks[i] for i in sorted(keep)], usage
++
+     def _finalize_evidence(self, result, vote=None):
+         if config.EVIDENCE_POLICY == "legacy" or result.strategy == "direct_reference" or result.error:
+             return result
+@@ -347,12 +382,7 @@ class ClaimVerificationEngine:
+             query_metadata = {'mode': config.RETRIEVAL_QUERY_MODE, 'claim_language': language,
+                               'booklet_language': source_language, 'translation_used': False}
+             if language != source_language:
+-                from src.query_translation import QueryTranslator
+-                with self._source_pages_lock:
+-                    if self._query_translator is None:
+-                        self._query_translator = QueryTranslator(self.client, config.QUERY_TRANSLATION_CACHE_DIR)
+-                translated, prompt_tokens, completion_tokens, receipt = self._query_translator.get(claim, language, source_language)
+-                translation_usage = prompt_tokens, completion_tokens
++                translated, translation_usage, receipt = self._translate_query(claim, language, source_language)
+                 query_metadata.update(receipt)
+                 if translated:
+                     query_metadata['translation_used'] = True
+@@ -377,6 +407,7 @@ class ClaimVerificationEngine:
+                     exclude_sections=opposing_sections(claim) if config.SPEAKER_AWARE else None,
+                     ensure_sections={side: config.SPEAKER_BOOST}
+                     if config.SPEAKER_BOOST and (side := attributed_section(claim)) else None,
++                    section_caps={_LEGAL_TEXT_SECTION: config.LEGAL_TEXT_MAX_PAGES} if config.LEGAL_TEXT_MAX_PAGES else None,
+                 )
+             else:
+                 candidate_paras = retriever.retrieve(claim, top_k=top_k, target_vote=vote)
+@@ -533,8 +564,11 @@ class ClaimVerificationEngine:
+         numerical_conflict_msg = num_conflict.explanation if num_conflict else None
+ 
+         if self.prompt_mode in ("compact", "ids"):
+-            chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in chunk_reference(reference)]
+-            return self._compact_predict(
++            texts, usage = chunk_reference(reference), (0, 0)
++            if config.REFERENCE_MAX_CHARS and len(reference) > config.REFERENCE_MAX_CHARS:
++                texts, usage = self._focus_reference(texts, claim, claim_language)
++            chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in texts]
++            result = self._compact_predict(
+                 passages=chunks,
+                 claim=claim,
+                 claim_language=claim_language,
+@@ -544,6 +578,10 @@ class ClaimVerificationEngine:
+                 booklet_path="supplied_reference",
+                 numerical_conflict_msg=numerical_conflict_msg,
+             )
++            result.tokens_prompt += usage[0]
++            result.tokens_completion += usage[1]
++            result.tokens_total += sum(usage)
++            return result
+ 
+         # 2. Apertus Model Inference over premise text
+         nli_output = self.client.infer(
+diff --git a/track_2a/src/retriever.py b/track_2a/src/retriever.py
+index f0a7271..43a6b0d 100644
+--- a/track_2a/src/retriever.py
++++ b/track_2a/src/retriever.py
+@@ -126,6 +126,7 @@ class PassageRetriever:
+         exclude_sections: Optional[set] = None,
+         ensure_sections: Optional[Dict[str, int]] = None,
+         query_variants: Optional[List[str]] = None,
++        section_caps: Optional[Dict[str, int]] = None,
+     ) -> List[Dict[str, Any]]:
+         """
+         Booklet-wide ranking: normalised BM25(claim) + vote_weight * normalised BM25(vote title).
+@@ -158,6 +159,19 @@ class PassageRetriever:
+         ranked = sorted(range(len(self.paragraphs)), key=lambda i: combined[i], reverse=True)
+         if exclude_sections:
+             ranked = [i for i in ranked if self.paragraphs[i].get("section") not in exclude_sections]
++        # At most n pages of a section (e.g. the legal text, which repeats the vote title and so outranks the
++        # explanation pages); the freed places go to the next pages by rank, so the context size stays top_k
++        if section_caps:
++            taken: Dict[str, int] = {}
++            capped = []
++            for i in ranked:
++                section = self.paragraphs[i].get("section")
++                if section in section_caps:
++                    if taken.get(section, 0) >= section_caps[section]:
++                        continue
++                    taken[section] = taken.get(section, 0) + 1
++                capped.append(i)
++            ranked = capped
+         selected = ranked[:top_k]
+         # Guarantee the best pages of a section (e.g. the committee's arguments for a committee claim): they replace
+         # the lowest-ranked other pages, so the context size stays top_k
