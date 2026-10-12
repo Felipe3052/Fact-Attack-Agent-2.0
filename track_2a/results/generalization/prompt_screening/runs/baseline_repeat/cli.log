@@ -1,0 +1,4 @@
+[timing] 180 cases, wall 94.0 s, non-LLM 8.8 ms/case
+Successfully processed 180 case(s) -> 
+<skill-screening-worktree>\track_2a\
+results\generalization\prompt_screening\runs\baseline_repeat\predictions.jsonl

@@ -1,0 +1,15 @@
+{
+  "purpose": "verify a restored input/ (cases.jsonl, expected-labels.jsonl) without storing gold reference texts",
+  "dataset": "OST MNLI over Swiss Voting Booklets v1.1, pinned by scripts/prepare_competition_cases.py --version v1.1",
+  "source_case_manifest": {
+    "cases.jsonl": "7e5a0fe01d228731cedd70f2949bd623788f89f6c7d9653b6267943159898ed4",
+    "expected-labels.jsonl": "52ae27e9c122f5a5c52b83c478f5910b4487ea5304fe6e6bae2d764a16c825ad",
+    "folds.jsonl": "2fb4cd36539b0db1fea11203c51f1a5e9767f31b0d72d74761e66ae602dcd666"
+  },
+  "order": "rows in the order of input/selection.csv",
+  "sha256_lf": {
+    "expected-labels.jsonl": "cce6ca1a081baf728c0de2a814b1c85a008a6c934449a393a829f0273a7e65f6",
+    "folds.jsonl": "eb2884aaedd9592fe69d2051b649a01cda50074ae3b4e2f907fce001ae8a9108"
+  },
+  "sha256_lf_cases_with_booklet_path_as_booklets/<file>": "6148377dc80476504e72f0930fcecf8742717932af63711acc3f0e6244c64a7a"
+}

@@ -1,0 +1,85 @@
+{
+  "purpose": "paired Task-A prompt screen; frozen before candidate evaluation",
+  "selection_seed": "20261012-task-a-relation-screen-v1",
+  "dataset": "OST MNLI over Swiss Voting Booklets v1.1",
+  "source_case_manifest": {
+    "cases.jsonl": "7e5a0fe01d228731cedd70f2949bd623788f89f6c7d9653b6267943159898ed4",
+    "expected-labels.jsonl": "52ae27e9c122f5a5c52b83c478f5910b4487ea5304fe6e6bae2d764a16c825ad",
+    "folds.jsonl": "2fb4cd36539b0db1fea11203c51f1a5e9767f31b0d72d74761e66ae602dcd666"
+  },
+  "source_B0_commit": "3bf73bddf0afdba151600ae11d6582022abe1525",
+  "source_B0_prediction_sha256": "5fa8bca9f5a874bc6e82dc20c43c6c3e72f7951ecc0e615fb3705b368b3fe29e",
+  "source_D0_sha256": "49a7e61441f2884a241e09dfea2ee102e1b7e3a6634f4cf41502ca4d43c6c89b",
+  "cases": 180,
+  "panels": {
+    "baseline_error_diagnostic": 60,
+    "representative": 120
+  },
+  "representative_design": "5 folds x 3 gold labels x 8 cases = 120; stable hash selection within each cell",
+  "diagnostic_confusion_quotas": {
+    "0->2": 20,
+    "0->1": 16,
+    "2->1": 12,
+    "2->0": 8,
+    "1->2": 3,
+    "1->0": 1
+  },
+  "fold_counts": {
+    "0": 29,
+    "1": 39,
+    "2": 36,
+    "3": 36,
+    "4": 40
+  },
+  "fold_by_date_counts": {
+    "0:2024-09-22": 7,
+    "0:2025-09-28": 11,
+    "0:2025-11-30": 4,
+    "0:2026-06-14": 7,
+    "1:2021-09-26": 8,
+    "1:2022-02-13": 17,
+    "1:2023-06-18": 10,
+    "1:2025-02-09": 4,
+    "2:2020-09-27": 9,
+    "2:2022-05-15": 5,
+    "2:2024-11-24": 11,
+    "2:2026-03-08": 11,
+    "3:2020-02-09": 7,
+    "3:2021-06-13": 10,
+    "3:2021-11-28": 11,
+    "3:2024-03-03": 8,
+    "4:2020-11-29": 5,
+    "4:2021-03-07": 11,
+    "4:2022-09-25": 7,
+    "4:2024-06-09": 17
+  },
+  "language_pair_counts": {
+    "de->de": 20,
+    "de->fr": 20,
+    "de->it": 16,
+    "fr->de": 22,
+    "fr->fr": 21,
+    "fr->it": 20,
+    "it->de": 18,
+    "it->fr": 19,
+    "it->it": 24
+  },
+  "claim_type_counts": {
+    "committee": 37,
+    "consequence": 37,
+    "federal_council": 39,
+    "legal_text": 28,
+    "other": 4,
+    "summary": 35
+  },
+  "files_sha256": {
+    "cases.jsonl": "1f1668d269e9d55cefe80aaf36759b96cd4a72e9ad7a2474086eeae6f65bbccb",
+    "expected-labels.jsonl": "01af2be96a7c99cde1485408ef441a73a64962a23f3e2981880ec5e6dcf07413",
+    "folds.jsonl": "0c3d3545a0397aca046bf8b29b0b4113662aeb2ba1b4b50ed7ee6037bfba8f07"
+  },
+  "file_hashes": {
+    "cases.jsonl": "1f1668d269e9d55cefe80aaf36759b96cd4a72e9ad7a2474086eeae6f65bbccb",
+    "expected-labels.jsonl": "01af2be96a7c99cde1485408ef441a73a64962a23f3e2981880ec5e6dcf07413",
+    "folds.jsonl": "0c3d3545a0397aca046bf8b29b0b4113662aeb2ba1b4b50ed7ee6037bfba8f07"
+  }
+}
