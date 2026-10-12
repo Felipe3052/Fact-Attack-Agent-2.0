@@ -402,3 +402,54 @@ E6 only as offline scripts. Fixed alongside: `scripts/compare_competition_runs.l
 and `report_decision.py`) now reads prediction files as UTF-8; before, the scoring step of a decision run crashed
 on Windows (cp1252) after inference had finished. Inference, prompts and model settings are unchanged. On a Windows
 console `report_decision.py` also needs `PYTHONIOENCODING=utf-8` to print its report (it contains "→").
+
+## 7. E7 — compact task A prompt, paired full evaluation (2026-10-12)
+
+Candidate (see *Integration* below); the submission default stays off. Branch `exp/task-a-prompt-screening`, artefacts in
+`results/generalization/E7_*` (see `E7_analysis/README.md`).
+
+- **Hypothesis:** four short label rules appended to the task A system prompt (`A_COMPACT_PROMPT`, ~+97 tokens) fix
+  over-cautious neutral answers without the shift towards contradiction seen with the longer skill and the relation
+  prompt (180-case screen: representative 7 → 5 errors, Hit@5 66 → 70 of 80; diagnostic E→C 20 → 18).
+- **Protocol:** fresh baseline and candidate on the same 1,488 cases; NLI input hashes 1,488/1,488 identical to a mock
+  dry run before inference; same translation cache (unchanged); only `A_COMPACT_PROMPT` differs. 0 final API
+  failures (baseline: 2 transient errors, retried successfully), 0 cases through the failure path.
+
+| Task A, 1,488 cases | Fresh baseline | Compact | Change |
+|---|---:|---:|---:|
+| Macro-F1 | 0.9419 | 0.9493 | +0.0075 (date bootstrap 95 %: −0.0022 … +0.0179; 7 % of resamples ≤ 0) |
+| Macro-F1, de-duplicated | 0.943 | 0.953 | +0.010 |
+| Accuracy | 0.9422 | 0.9496 | |
+| Errors | 86 | 75 | 22 fixed / 11 broken / 8 wrong → other wrong |
+| Evidence Hit@5 (990 gold E/C) | 858 (0.867) | 872 (0.881) | +23 / −9 (bootstrap 95 %: +0.002 … +0.025) |
+| Input / output tokens per case | 3,818 / 57.9 | 3,915 / 60.2 | +2.5 % / +4 % |
+| Non-LLM time per case (CLI estimate) | 1.7 ms | 2.5 ms | both negligible, not a measured difference |
+
+Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20],[9,467,19],[1,3,494]]`, compact
+`[[448,33,14],[10,472,13],[1,4,493]]`. E→C 34 → 33, E→N 20 → 14, C→N 19 → 13, N→C 3 → 4, C→E 9 → 10.
+
+- **Folds:** 1 (+0.021) and 2 (+0.017) better, 3 and 4 unchanged (identical accuracy), fold 0 worse (−0.011; 1 fixed,
+  3 broken, 2 of them N→C on one salary-minimum claim). **Dates:** 6 of 20 net better, 4 worse, 10 unchanged;
+  2020-09-27 contributes 6 of the 11 net fixes (several proposals), but leaving out any single date keeps ΔF1
+  between +0.004 and +0.009. **Language pairs:** 7 of 9 equal or better, de→it −0.014.
+- **Reading:** a consistent but small gain in macro-F1 and Hit@5 at +2.5 % tokens. The F1 interval still includes 0
+  (20 voting dates); the Hit@5 interval does not. No statistical significance is claimed.
+
+### E7 — integration as a candidate (2026-10-12, no new inference)
+
+- **Switch:** `A_COMPACT_PROMPT` in `src/config.py` and both `.env.example` files, **default `false`**. The submission
+  image runs the defaults, so the submission is unchanged until the default is changed by a separate decision.
+- **Text:** `ApertusClient.A_COMPACT_PROMPT_TEXT`, unchanged since commit `5907dd3` and identical to the source of both
+  E7 runs (`src_sha256` of `apertus_client.py` in their `run.json`); SHA-256 of the text
+  `1d392f22b1eb19ee741f7a0fef1cd676c00ef05db480a811269abc8586d67adc`. It contains "…, but never on information they do
+  not state." (added before the screen); a version without that clause was never evaluated.
+- **Scope:** appended to the task A system prompt only; retrieval, translation, caching, labels, evidence formatting
+  and model parameters are untouched.
+- **Tests** (`tests/test_apertus_client.py`, `TestCompactPromptSwitch`): default off in a clean interpreter; with every
+  switch off the task A and task B request fingerprints equal those of the submission baseline `7c17c9c`; task B
+  requests unchanged even with all three task A switches on; switch on appends exactly the evaluated text (hash) and
+  changes nothing else in the request; no other prompt variant is enabled. Full suite: 153 tests pass (1 skipped).
+- **Evidence status:** measured on development data only (all 20 voting dates were used for earlier decisions); the
+  macro-F1 interval includes 0, the Hit@5 interval does not; fold 0 (−0.011) and de→it (−0.014) are worse. There is no
+  independent confirmation, and no change of the final competition score is claimed (token and time scores are relative
+  to other teams).
