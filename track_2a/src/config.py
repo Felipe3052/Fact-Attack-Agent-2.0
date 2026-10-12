@@ -75,9 +75,10 @@ IDS_REASON = os.getenv("IDS_REASON", "false").lower() in ("true", "1", "yes")
 A_RELATION_PROMPT = os.getenv("A_RELATION_PROMPT", "false").lower() in ("true", "1", "yes")
 # Prompt-screening switch: the compact claim-check skill, Task A only. Disabled by default.
 A_SKILL_PROMPT = os.getenv("A_SKILL_PROMPT", "false").lower() in ("true", "1", "yes")
-# E7: compact label rules appended to the task A prompt only (ApertusClient.A_COMPACT_PROMPT_TEXT). Disabled by
-# default: with it off every request is byte-identical to the submission baseline (tests/test_apertus_client.py)
-A_COMPACT_PROMPT = os.getenv("A_COMPACT_PROMPT", "false").lower() in ("true", "1", "yes")
+# E7/E8: compact label rules appended to the task A prompt only (ApertusClient.A_COMPACT_PROMPT_TEXT). On by default:
+# the submission image sets no pipeline variables and runs these defaults. A_COMPACT_PROMPT=false restores the
+# previous baseline, whose requests are byte-identical to 7c17c9c (tests/test_apertus_client.py)
+A_COMPACT_PROMPT = os.getenv("A_COMPACT_PROMPT", "true").lower() in ("true", "1", "yes")
 # Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
 PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
 

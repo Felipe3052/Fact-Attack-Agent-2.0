@@ -49,14 +49,15 @@ SPEAKER_BOOST=2                             # always include the named side's 2 
 RETRIEVAL_QUERY_MODE=union                  # BM25 with the claim and its translation into the booklet language
 EVIDENCE_POLICY=raw_pages_and_blocks        # cited PyMuPDF pages + best-matching text blocks
 REFERENCE_MAX_CHARS=6000                    # task B: longer references cut to the passages that match the claim
-A_COMPACT_PROMPT=false                      # task A: compact label rules (E7 candidate, off by default)
+A_COMPACT_PROMPT=true                       # task A: compact label rules (E7, on in the submission; false = previous baseline)
 NLI_WORKERS=4                               # cases processed in parallel by the batch CLI
 ```
 
-`A_COMPACT_PROMPT=true` appends four label rules to the task A prompt only (task B is never affected). Evaluated in
+`A_COMPACT_PROMPT` (on by default, so active in the submission image, which sets no pipeline variable) appends four
+label rules to the task A prompt only (task B is never affected). Evaluated in
 E7 on 1,488 cases against a fresh baseline: macro-F1 0.9419 → 0.9493 (95 % date-bootstrap interval −0.002 … +0.018,
 so not significant), Hit@5 858 → 872 of 990, +2.5 % input tokens; see `docs/independent_experiments.md`, section 7.
-Off, every request is byte-identical to the submission baseline.
+With `A_COMPACT_PROMPT=false` every request is byte-identical to the previous submission baseline.
 
 A value set in a local `.env` overrides these for local runs; keep only endpoint and key there.
 `python scripts/run_decision.py --data <prepared cases> --name <run>` runs exactly the submission configuration

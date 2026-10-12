@@ -453,3 +453,15 @@ Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20]
   macro-F1 interval includes 0, the Hit@5 interval does not; fold 0 (−0.011) and de→it (−0.014) are worse. There is no
   independent confirmation, and no change of the final competition score is claimed (token and time scores are relative
   to other teams).
+
+## 8. E8 — compact task A prompt active in the submission (2026-10-12, no new inference)
+
+- **Activation:** `A_COMPACT_PROMPT` default `true` in `src/config.py` and both `.env.example` files. The submission image
+  is built from the repository-root `Dockerfile`, which sets no pipeline variable and copies no `.env`, so the image runs
+  these code defaults (checked by `test_submission_dockerfile_sets_no_pipeline_variable`). No second switch or image-only
+  setting was added. `A_COMPACT_PROMPT=false` restores the previous baseline (requests byte-identical to `7c17c9c`).
+- **Text:** unchanged, the E7 text (SHA-256 `1d392f22b1eb19ee741f7a0fef1cd676c00ef05db480a811269abc8586d67adc`).
+- **Effect on tools:** `scripts/run_decision.py` applies `.env.example`, so decision runs now use the compact rules unless
+  `--set A_COMPACT_PROMPT=false` is given (the E7 runs set the switch explicitly and are unaffected).
+- **Evidence status:** as in section 7 (development data only; macro-F1 interval includes 0, Hit@5 interval does not;
+  fold 0 and de→it worse). No change of the final competition score is claimed.

@@ -33,7 +33,7 @@ class TestApertusClient(unittest.TestCase):
 
         self.client.mock = False
         with patch.object(self.client, "_create_with_retry", side_effect=create), \
-                patch("src.config.A_RELATION_PROMPT", True):
+                patch("src.config.A_RELATION_PROMPT", True), patch("src.config.A_COMPACT_PROMPT", False):
             self.client.infer("same context", "same claim", passages=["same passage"], task_a=False)
             self.client.infer("same context", "same claim", passages=["same passage"], task_a=True)
 
@@ -57,8 +57,9 @@ class TestApertusClient(unittest.TestCase):
             return response, None
 
         self.client.mock = False
-        with patch.object(self.client, "_create_with_retry", side_effect=create):
-            self.client.infer("ctx", "claim", passages=["passage"], task_a=True)  # switch off (default)
+        # isolate the skill: the compact rules (on in the submission) are switched off explicitly
+        with patch.object(self.client, "_create_with_retry", side_effect=create), patch("src.config.A_COMPACT_PROMPT", False):
+            self.client.infer("ctx", "claim", passages=["passage"], task_a=True)  # every switch off
             with patch("src.config.A_SKILL_PROMPT", True):
                 self.client.infer("ctx", "claim", passages=["passage"], task_a=False)  # not task A
                 self.client.infer("ctx", "claim", passages=["passage"], task_a=True)
@@ -83,7 +84,8 @@ class TestApertusClient(unittest.TestCase):
 
         self.client.mock = False
         with patch.object(self.client, "_create_with_retry", side_effect=create):
-            self.client.infer("ctx", "claim", passages=["passage"], task_a=True)  # switch off (default)
+            with patch("src.config.A_COMPACT_PROMPT", False):
+                self.client.infer("ctx", "claim", passages=["passage"], task_a=True)  # switch explicitly off
             with patch("src.config.A_COMPACT_PROMPT", True):
                 self.client.infer("ctx", "claim", passages=["passage"], task_a=False)  # not task A
                 self.client.infer("ctx", "claim", passages=["passage"], task_a=True)
@@ -195,8 +197,9 @@ class TestApertusClient(unittest.TestCase):
         self.assertGreater(out.latency_ms, 0.0)
 
 
-# E7 (A_COMPACT_PROMPT). Request fingerprints (all request parameters except the environment-dependent model name)
-# produced by the submission baseline 7c17c9c for fixed inputs: task A = infer() with passages, task B = verify_premise().
+# E7/E8 (A_COMPACT_PROMPT, on in the submission). Request fingerprints (all request parameters except the
+# environment-dependent model name) produced by the previous submission baseline 7c17c9c for fixed inputs:
+# task A = infer() with passages, task B = verify_premise(). A_COMPACT_PROMPT=false must reproduce them exactly.
 SUBMISSION_TASK_A_REQUESTS_SHA256 = "7229c1ce11d1250fd7ddabf53eb98f80daaf789fb3de19a58463f1f2fe18c465"
 SUBMISSION_TASK_B_REQUESTS_SHA256 = "fe6bdd6bf7172e151b69f56db4cf65d898ba037ce31e967ba1546bbd6f2a2877"
 # SHA-256 of the compact rules exactly as evaluated in E7 (runs E7_compact and the 180-case screen)
@@ -238,14 +241,48 @@ class TestCompactPromptSwitch(unittest.TestCase):
         payload = json.dumps([{k: v for k, v in c.items() if k != "model"} for c in calls], sort_keys=True, ensure_ascii=False)
         return calls, hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-    def test_switch_is_off_by_default(self):
+    @staticmethod
+    def _clean_env(**extra):
         import os
-        from tests.test_submission_config import effective_config
-        clean = {k: v for k, v in os.environ.items() if k in ("PATH", "SYSTEMROOT", "TEMP", "TMP", "HOME")}
-        defaults = effective_config(["A_COMPACT_PROMPT", "A_SKILL_PROMPT", "A_RELATION_PROMPT"], clean)
-        self.assertEqual(defaults, {"A_COMPACT_PROMPT": False, "A_SKILL_PROMPT": False, "A_RELATION_PROMPT": False})
+        return {**{k: v for k, v in os.environ.items() if k in ("PATH", "SYSTEMROOT", "TEMP", "TMP", "HOME")}, **extra}
 
-    def test_off_requests_are_byte_identical_to_the_submission_baseline(self):
+    def test_submission_configuration_enables_only_the_compact_prompt(self):
+        # The submission image sets no pipeline variable (Dockerfile test below), so it runs the code defaults: a fresh
+        # interpreter without environment or .env file, independent of the developer's local settings
+        from tests.test_submission_config import effective_config
+        names = ["A_COMPACT_PROMPT", "A_SKILL_PROMPT", "A_RELATION_PROMPT"]
+        self.assertEqual(effective_config(names, self._clean_env()),
+                         {"A_COMPACT_PROMPT": True, "A_SKILL_PROMPT": False, "A_RELATION_PROMPT": False})
+        # the previous baseline stays selectable through the same switch
+        self.assertFalse(effective_config(["A_COMPACT_PROMPT"], self._clean_env(A_COMPACT_PROMPT="false"))["A_COMPACT_PROMPT"])
+
+    def test_submission_dockerfile_sets_no_pipeline_variable(self):
+        # The image runs the code defaults only if the submission Dockerfile (repository root, the one the organisers
+        # build) sets none of the pipeline settings. It is not copied into the image, so this runs on the host only.
+        import re
+        from tests.test_submission_config import submission_settings
+        dockerfile = Path(__file__).resolve().parents[2] / "Dockerfile"
+        if not dockerfile.exists():
+            self.skipTest("submission Dockerfile not available (e.g. inside the image)")
+        instructions = re.sub(r"\\\s*\n", " ", dockerfile.read_text(encoding="utf-8"))  # join continued lines
+        set_names = set()
+        for line in instructions.splitlines():
+            m = re.match(r"\s*(ENV|ARG)\s+(.*)", line)
+            if m:
+                set_names |= set(re.findall(r"([A-Z_][A-Z0-9_]*)=", m.group(2))) | set(re.findall(r"^([A-Z_][A-Z0-9_]*)\s*$", m.group(2)))
+        self.assertTrue(set_names)  # the parser found the existing ENV/ARG lines
+        self.assertEqual(set_names & set(submission_settings()), set())
+
+    def test_submission_default_task_a_request_is_baseline_plus_compact_text(self):
+        from tests.test_submission_config import effective_config
+        default = effective_config(["A_COMPACT_PROMPT"], self._clean_env())["A_COMPACT_PROMPT"]
+        on, _ = self._requests("A", A_COMPACT_PROMPT=default)
+        off, digest_off = self._requests("A")
+        self.assertEqual(digest_off, SUBMISSION_TASK_A_REQUESTS_SHA256)
+        self.assertEqual(on[0]["messages"][0]["content"], off[0]["messages"][0]["content"] + ApertusClient.A_COMPACT_PROMPT_TEXT)
+        self.assertEqual(self._requests("B", A_COMPACT_PROMPT=default)[1], SUBMISSION_TASK_B_REQUESTS_SHA256)
+
+    def test_explicit_off_requests_are_byte_identical_to_the_previous_baseline(self):
         self.assertEqual(self._requests("A")[1], SUBMISSION_TASK_A_REQUESTS_SHA256)
         self.assertEqual(self._requests("B")[1], SUBMISSION_TASK_B_REQUESTS_SHA256)
 
