@@ -258,3 +258,15 @@ beobachteten Baseline-Schwankung (1 Label), beruht aber auf wenigen Fällen und 
 E→C-Fehler entsteht nur durch Verschiebung eines bereits falschen Falls. Im Diagnosepanel korrigiert der Kompakt-Prompt
 mehr und verschiebt weniger zu Contradiction als der lange Skill. Ob das auf die Population übertragbar ist, klärt
 dieses Screening nicht.
+
+## Publikationsbereinigung E9 (12. Oktober 2026)
+
+- `input/selection.csv` enthält die Spalten `gold` und `baseline_transition` (Gold→B0-Vorhersage) nicht mehr. Sie werden
+  von keinem Skript gelesen: `restore_inputs.py` nutzt nur die Fall-IDs und ihre Reihenfolge, die Auswertungen nur
+  `panel` und `claim_type`. Nach dem Entfernen ergeben `restore_inputs.py` sowie `analyze_skill_screen.py` und
+  `analyze_compact_screen.py` inhaltlich identische Ergebnisdateien. `prepare_screen.py` erzeugt weiterhin die
+  vollständige Fassung mit diesen Spalten aus dem gepinnten Datensatz.
+- Weiterhin enthalten (Grundsatzentscheidung offen, gleiche Praxis wie die bereits veröffentlichten E1–E3-Berichte
+  auf `main`): Fall-ID-Listen korrigierter/neu falscher Fälle in den Auswertungen und vier im Bericht genannte Fälle.
+  Zusammen mit den Vorhersagen lässt sich daraus für diese Fälle das Gold-Label ableiten; Gold-Referenztexte sind nicht
+  enthalten.
