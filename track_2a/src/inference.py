@@ -195,6 +195,14 @@ def load_parsed_booklet(pdf_path: Union[str, Path], parser: PDFParser) -> Dict[s
     return parsed
 
 
+def page_char_limit(rank: int) -> int:
+    """Character window for the context page at 0-based position `rank` (the order the model sees). Evidence quotes
+    are built from the whole page (page_text) and are not affected."""
+    if config.PAGE_MAX_CHARS_TAIL and rank >= config.PAGE_FULL_RANKS:
+        return min(config.PAGE_MAX_CHARS, config.PAGE_MAX_CHARS_TAIL)
+    return config.PAGE_MAX_CHARS
+
+
 def evidence_items(passages: List[Dict[str, Any]], cited: List[int], query: str) -> List[Any]:
     """
     Evidence as (quote, passage) pairs, most relevant first. Only the first five items are scored, each at most
@@ -414,8 +422,8 @@ class ClaimVerificationEngine:
                 candidate_paras = retriever.retrieve(claim, top_k=top_k, target_vote=vote)
             if config.PAGE_MAX_CHARS:
                 query = f"{claim} {vote or ''}"
-                candidate_paras = [{**p, "text": clip_to_query(p["text"], query, config.PAGE_MAX_CHARS), "page_text": p["text"]}
-                                   for p in candidate_paras]
+                candidate_paras = [{**p, "text": clip_to_query(p["text"], query, page_char_limit(rank)), "page_text": p["text"]}
+                                   for rank, p in enumerate(candidate_paras)]
             context_blocks = []
             for p in candidate_paras:
                 context_blocks.append(f"[Page {p['page_number']}] {p['text']}")

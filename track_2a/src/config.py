@@ -60,6 +60,10 @@ PASSAGE_CHARS = int(os.getenv("PASSAGE_CHARS", "0"))
 # sentences that best matches claim + vote title; only a few dense legal-text pages are affected.
 # 3000: test input tokens 5,725 -> 4,696 (p95 12.7k -> 7.4k), macro-F1 0.925 -> 0.928 (dev 0.908 -> 0.913)
 PAGE_MAX_CHARS = int(os.getenv("PAGE_MAX_CHARS", "3000"))
+# Experiment (task A): a smaller window for the lower-ranked context pages only. Pages after the first PAGE_FULL_RANKS
+# keep at most PAGE_MAX_CHARS_TAIL characters (0 = off). The best gold page is among the first 4 in 85 % of the cases.
+PAGE_MAX_CHARS_TAIL = int(os.getenv("PAGE_MAX_CHARS_TAIL", "0"))
+PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
 
 # Prompt mode:
 #   'ids'     - JSON with confidences + cited passage ids (default: best F1, ~55 output tokens)
