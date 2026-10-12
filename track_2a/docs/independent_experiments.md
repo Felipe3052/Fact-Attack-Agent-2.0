@@ -465,3 +465,26 @@ Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20]
   `--set A_COMPACT_PROMPT=false` is given (the E7 runs set the switch explicitly and are unaffected).
 - **Evidence status:** as in section 7 (development data only; macro-F1 interval includes 0, Hit@5 interval does not;
   fold 0 and de→it worse). No change of the final competition score is claimed.
+
+## 9. E11 — smaller window for lower-ranked task A pages (2026-10-12, rejected)
+
+- **Hypothesis:** the best gold page is among the first 4 context pages in 85 % of the cases (D0 reconstruction), so
+  clipping only pages 5–8 to 1,500 characters (`PAGE_MAX_CHARS_TAIL=1500`, `PAGE_FULL_RANKS=4`) saves input tokens without
+  losing the decisive text. Offline: context −11 %, 78 % of the gold sentences on the clipped pages kept.
+- **Protocol:** one run on all 1,488 task A cases against `E7_compact` (the submission configuration). A mock dry run with
+  the switch off reproduced the E7_compact NLI inputs in 1,488/1,488 cases; with the switch on, 1,363 cases change.
+  Same translation cache (unchanged), 0 API failures. Artefacts: `results/generalization/E11_tail1500`, `E11_analysis`.
+
+| Task A, 1,488 cases | E7_compact (submission) | E11 tail 1500 | Change |
+|---|---:|---:|---:|
+| Macro-F1 | 0.9493 | 0.9433 | −0.0061 (date bootstrap 95 %: −0.0159 … +0.0042) |
+| Evidence Hit@5 (990) | 872 | 852 | −20 (95 %: −0.036 … −0.004) |
+| Input tokens / case | 3,915 | 3,586 | −8.4 % |
+| Errors | 75 | 84 | 17 fixed / 26 broken; E→C 33 → 35, C→N 13 → 17 |
+
+- Folds: 0 better, 3 equal, 1, 2 and 4 worse (fold 2 −0.014); 8 of 20 voting dates net worse, 5 better. Hit@5 drops
+  although evidence is built from whole pages: with less context the model cites other pages and changes labels.
+- **Decision: rejected** against the predeclared criteria (F1 loss ≤ 0.003, Hit@5 and E→C not worse). The token saving
+  (−8.4 %) does not make up for it (score scenarios negative for a token score ≤ 0.5). The switch stays in the code,
+  off by default; the submission is unchanged. Like E1 and E3, it confirms that the model needs the full context of
+  the lower-ranked pages as well.
