@@ -59,6 +59,28 @@ class TestPipeline(unittest.TestCase):
         self.assertIn(res.label, (0, 1, 2))
         self.assertEqual(res.strategy, "full")
 
+    def test_task_a_prompt_switches_never_reach_task_b(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"label": 0, "evidence_ids": [1]}'))],
+            usage=SimpleNamespace(prompt_tokens=20, completion_tokens=5, total_tokens=25),
+        )
+        calls = []
+        client = ApertusClient(mock=True)
+        client.mock = False
+        engine = ClaimVerificationEngine(apertus_client=client)
+        with patch.object(client, "_create_with_retry", side_effect=lambda **kw: (calls.append(kw), (response, None))[1]), \
+                patch("src.config.A_SKILL_PROMPT", True), patch("src.config.A_RELATION_PROMPT", True), \
+                patch("src.config.A_COMPACT_PROMPT", True):
+            engine.verify_premise(claim="Der Bundesrat empfiehlt die Ablehnung.", claim_language="de",
+                                  reference="Aus Sicht von Bundesrat und Parlament: Empfehlung Nein.", case_id="b-1")
+        self.assertTrue(calls)
+        for call in calls:
+            self.assertNotIn("CLAIM CHECK", call["messages"][0]["content"])
+            self.assertNotIn("RELATION CHECK", call["messages"][0]["content"])
+            self.assertNotIn("LABEL RULES", call["messages"][0]["content"])
+
     def test_verify_premise_beginner_task(self):
         claim = "Der Bundesrat empfiehlt die Ablehnung."
         reference = "Aus Sicht von Bundesrat und Parlament bringt die Initiative Unsicherheit. Empfehlung: Nein"

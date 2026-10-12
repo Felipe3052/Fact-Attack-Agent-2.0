@@ -308,12 +308,37 @@ class ApertusClient:
             kwargs.update(logprobs=True, top_logprobs=5)
         return self._create_with_retry(**kwargs)
 
+    # Prompt-screening variant (A_SKILL_PROMPT, task A only): structure the claim, then a label rule that also
+    # guards against reading a paraphrase or summary as a contradiction (the largest task A error class)
+    A_SKILL_PROMPT_TEXT = (
+        "\nCLAIM CHECK (do this before choosing the label):\n"
+        "1. Parse the claim into actor or affected group, action or state, object, and qualifiers: numbers, units, "
+        "time, conditions, exceptions, cause vs. mere sequence, modality (must / may / will / should). Add nothing "
+        "the claim does not say.\n"
+        "2. Find the passage(s) on the same actor and object; combine passages when the claim needs several. Use "
+        "only these passages.\n"
+        "3. 0 if the passages state every part, also when worded differently, summarised, or in another language. "
+        "2 only if they state something incompatible about the same point: the opposite, another value, another "
+        "actor, another modality (may vs. must). 1 if a part is not settled by the passages. Missing support is "
+        "never 2; an explicit conflict is never 1.\n"
+        "evidence_ids: the passages that contain the deciding statement.\n"
+    )
+    # Prompt-screening variant (A_COMPACT_PROMPT, task A only): the label rules of the skill in a few lines
+    A_COMPACT_PROMPT_TEXT = (
+        "\nLABEL RULES: Compare actor, action, object and the decisive conditions or modality of the claim with the "
+        "passages. 0 only if the passages support the claim, also when worded differently, summarised or in another "
+        "language, but never on information they do not state. 2 only if they state something incompatible with the "
+        "same claim; missing support is not a contradiction. 1 if they neither support nor refute it. Use only the "
+        "passages, no outside facts.\n"
+    )
+
     def infer(
         self,
         context: str,
         claim: str,
         claim_language: Optional[str] = None,
         passages: Optional[List[str]] = None,
+        task_a: bool = False,
     ) -> NLIOutput:
         """
         Evaluate whether the booklet context entails, contradicts, or is neutral towards the claim.
@@ -380,6 +405,23 @@ class ApertusClient:
                 "The context is a list of numbered passages [P1], [P2], ... and may be in a different "
                 "language (German, French, Italian) than the claim: compare meaning, not wording.\n",
             )
+
+        if task_a and passages is not None and config.A_RELATION_PROMPT:
+            system_prompt += (
+                "\nRELATION CHECK (apply before choosing the label): Compare the same proposition across the claim "
+                "and the passages: who is involved, what action or state and object are asserted, and the relevant "
+                "properties, including negation, amount and unit, time, scope, conditions, and modality. Label 0 "
+                "when a passage states the same fact or a logically equivalent one. Label 2 only when the text "
+                "states an incompatible fact about that same actor, action, object, and property (for example an "
+                "explicit opposite, negation, or conflicting value). A missing detail, silence, or an unsupported "
+                "claim is not a contradiction; use 1 when the passages do not settle it. Do not turn an explicit "
+                "opposite or conflicting value into Neutral. A different speaker's position is not a contradiction "
+                "of the attributed speaker's claim.\n"
+            )
+        if task_a and passages is not None and config.A_SKILL_PROMPT:
+            system_prompt += self.A_SKILL_PROMPT_TEXT
+        if task_a and passages is not None and config.A_COMPACT_PROMPT:
+            system_prompt += self.A_COMPACT_PROMPT_TEXT
 
         if passages is not None and config.PROMPT_SHORT:
             # Same rules in fewer words: input tokens are scored relative to the most frugal team

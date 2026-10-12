@@ -70,6 +70,17 @@ PROMPT_MODE = os.getenv("PROMPT_MODE", "ids")
 # 'ids' mode: let the model write one short sentence before its confidences (a minimal reasoning step)
 IDS_REASON = os.getenv("IDS_REASON", "false").lower() in ("true", "1", "yes")
 
+# Prompt-screening switch: add the contrastive entity/action/property checklist to Task A only.
+# Disabled by default; it changes no submission behaviour unless explicitly enabled.
+A_RELATION_PROMPT = os.getenv("A_RELATION_PROMPT", "false").lower() in ("true", "1", "yes")
+# Prompt-screening switch: the compact claim-check skill, Task A only. Disabled by default.
+A_SKILL_PROMPT = os.getenv("A_SKILL_PROMPT", "false").lower() in ("true", "1", "yes")
+# E7: compact label rules appended to the task A prompt only (ApertusClient.A_COMPACT_PROMPT_TEXT). Disabled by
+# default: with it off every request is byte-identical to the submission baseline (tests/test_apertus_client.py)
+A_COMPACT_PROMPT = os.getenv("A_COMPACT_PROMPT", "false").lower() in ("true", "1", "yes")
+# Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
+PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
+
 # 'ids' mode: a condensed system/user prompt with the same rules (fewer input tokens per case)
 PROMPT_SHORT = os.getenv("PROMPT_SHORT", "false").lower() in ("true", "1", "yes")
 
