@@ -64,6 +64,8 @@ serve as inspiration only; no code, prompt or pipeline of another team is used.
 | E2 | 2026-10-11 | Task B: a long reference can be cut to its relevant chunks without losing quality | **adopted** (default since the holdout check) |
 | E3 | 2026-10-11 | Task A: tighter page windows (2,000 instead of 3,000 characters) save tokens at equal quality | **rejected** |
 | E4 | 2026-10-11 | Task A evidence: rank text blocks with the claim and its translation | **not adopted** (offline replay) |
+| E5 | 2026-10-12 | Task A: navigation bars give their pages a section label (summary / in detail) instead of none | **rejected** (section 6) |
+| E6 | 2026-10-12 | Task A evidence: the five best text blocks of the cited pages instead of whole pages first | **rejected** (offline, section 6) |
 
 ### E0 — baseline (`results/generalization/B0_submission`)
 
@@ -301,3 +303,102 @@ Image built from commit `59b55cd` (`docker build --platform linux/amd64`, 60/60 
   case including start-up and the three new booklets. E2 is active in the image: long references cost
   2,100–2,500 input tokens per case. Official `evaluate.py`: advanced 15/15 correct, Hit@5 6/7; beginner 11/12
   (macro-F1 0.896 on 12 cases); both above the minimum thresholds. This is a contract check, not a quality estimate.
+
+## 6. Task A error diagnosis, E5 and E6 (2026-10-12)
+
+Everything here is development data (all 20 voting dates); the holdout was not touched. Artefacts:
+`results/generalization/D0_error_diagnosis` (diagnosis), `E5_navigation_sections`, `E6_evidence_blocks_offline`.
+
+### D0 — where task A loses points (offline, B0 predictions, no API)
+
+The context of every task A case of B0 was rebuilt with the production retrieval (`diag_contexts.py`; the cited pages
+of B0 lie outside the rebuilt context in 2 of 1,488 cases). Gold passages were mapped to booklet pages with the
+official matcher on the passage **without its leading vote title**: every one of the 990 gold references starts
+with the vote title, and any block that only repeats the title would otherwise count as a gold page.
+
+| B0, task A | Label errors (85) | Hit@5 misses (130) |
+|---|---:|---:|
+| Gold page not in the 8-page context | 12 | 12 (+9 predicted neutral) |
+| Gold page in context, decisive text clipped away | 0 | – |
+| Gold page in context, label wrong | 69 | – |
+| Gold page in context, predicted neutral (no evidence) | – | 30 |
+| Gold page in context, not cited | – | 57 (30 summary claims; 51 cite three other pages) |
+| Gold page cited, none of the five items matches | – | 22 |
+| API / format failures | 0 | 0 |
+
+- Retrieval is not the bottleneck (gold page in context in 97.9 % of gold-0/2 cases); errors are reading and
+  citation errors. 82 of 85 label errors are identical in B0 and B0b, and they come from 64 claim texts: 16 claims
+  (the same claim against the DE/FR/IT booklets) account for 37 errors.
+- Largest groups: consequence claims E→C 18 / E→N 11, committee claims E→C 15. Example: "les droits de douane sur
+  tous les principaux produits suisses exportés vers l'Indonésie seront éliminés" is answered Contradiction against
+  the German booklet four times, although the context contains "auf allen wichtigen Schweizer Exporten nach
+  Indonesien [werden] die Zölle wegfallen".
+- Rejected without an API run: choosing the 3,000-character page window with the claim's translation as well
+  (`clip_to_query` uses claim + vote only). Only 109 gold pages in 82 cases are clipped at all, 92 % of their gold
+  sentences stay in the window with or without the translation (0 better, 0 worse), and none of the 85 label errors
+  involves a clipped gold page.
+
+### E5 — section labels for navigation-bar pages (`results/generalization/E5_navigation_sections`)
+
+- **Bottleneck:** every part of a proposal opens with a navigation bar listing the parts that follow with their page
+  numbers ("Zweite Vorlage: Jagdgesetz | Vorlage im Detail 26 | Argumente 34"). `detect_section_heading` read these
+  as a table of contents and reset the section, so 434 pages (overview, in detail) reached the model without a label,
+  while the prompt asks it to check "according to the summary …" claims against the summary.
+- **Hypothesis:** a navigation-bar page belongs to the part before the first listed one; with the label, summary
+  claims cite the summary page (Hit@5 up) at unchanged tokens.
+- **Implementation** (branch `exp/e5-navigation-sections`, commit `edbd8f7`, not merged; diff in `src.diff`):
+  `navigation_section()` in `pdf_parser.py`, parse cache version 8. Page text identical on all 3,241 pages; exactly
+  434 labels change, all from none (191 summary, 223 in detail, 20 Federal Council arguments).
+- **Label check** (stratified reading of the relabelled pages): in detail 8/8 and summary ~7/8 correct, but the 20
+  "Federal Council" labels are all wrong (detail pages): plural headings ("Arguments des comités référendaires") are
+  not matched and the Federal Council heading wraps before its page number, so only "voting text" was found. Through
+  the speaker boost these labels moved 26 of 1,488 contexts.
+- **Result** (task A, 1,488 cases, 0 API failures, 0 failed cases; the scoring step of `run_decision.py` crashed on
+  Windows after inference and was redone on the unchanged predictions, see `run.json` and the UTF-8 fix below):
+
+  | | B0 | B0b (repeat) | E5 |
+  |---|---:|---:|---:|
+  | Macro-F1 | 0.9425 | 0.9446 | 0.9446 |
+  | Evidence Hit@5 | 0.8687 (860) | 0.8697 (861) | 0.8737 (865) |
+  | Input tokens / case | 3,866 | 3,867 | 3,868 |
+  | Labels fixed / broken vs B0 · vs B0b | – | – | 8 / 5 · 6 / 6 |
+  | Hit@5 fixed / broken vs B0 · vs B0b | – | 7 cases differ from B0 | 21 / 16 · 20 / 16 |
+
+  Macro-F1 change vs B0 −0.002 … +0.007, vs B0b −0.005 … +0.005 (95 % date bootstrap). F1 worse in 3 of 5 folds;
+  Hit@5 worse in folds 0 (−3) and 4 (−5) and for de→fr (0.81 → 0.73). Summary claims gain Hit@5 (183 → 193), but
+  they do not cite the summary page more often (93 → 92 cases), so the predicted mechanism is not what moved them.
+  Federal Council claims 1 → 2 label errors, legal-text claims 14 → 16.
+- **Decision: rejected.** The Hit@5 gain (+5 vs B0, +4 vs B0b) does not clear the predeclared bar (> 5 hits) nor
+  the run-to-run noise (7 cases), F1 is unchanged, and the change brings 20 wrong labels. A corrected variant without
+  the Federal Council labels was estimated offline: only 2 of the 16 lost hits and 1–2 label changes involve them,
+  so it would stay within noise as well; not run.
+
+### E6 — five best text blocks instead of whole pages first (offline, `results/generalization/E6_evidence_blocks_offline`)
+
+- **Hypothesis:** of the five evidence items (three whole cited pages + two best blocks), more blocks hit the gold
+  passage more often. Labels, prompt and tokens unchanged; replayed on the fixed citations of B0 and B0b (the replay
+  of the production composition reproduces 860/990 exactly). Variant chosen from four (3/2, 2/3, 1/4, 0/5 pages /
+  blocks); a nested fold check picked 0/5 on either half and it gained on the other (+7, +8 hits).
+- **What Hit@5 measures** (official `evaluate.py`): for the 990 cases with gold entailment / contradiction, whether
+  one of the first five *submitted evidence texts* (each ≤ 5,000 normalised characters) fuzzy-matches the gold
+  passage (`partial_ratio` ≥ 90). It is not retrieval recall; the page number is not used; a neutral answer is a miss.
+- **Result:**
+
+  | Fixed B0 citations (B0b alike) | Production | E6 |
+  |---|---:|---:|
+  | Hit@5, official | 0.8687 | 0.8838 (+27 / −12) |
+  | Hit@5 counting only matches of the passage body (without the vote title) | **0.8434** | **0.7657** |
+  | Hits that match only the vote title | 25 | 117 |
+
+  12 of the 27 gained hits match only the vote title that opens every gold reference (gained blocks: median 130
+  characters); all 12 lost hits are whole gold pages that contain the passage.
+- **Decision: rejected.** The gain comes from the scoring definition, not from better evidence: it would exploit
+  the title prefix while the real evidence gets clearly worse (0.843 → 0.766 on the passage body).
+
+### Not changed by E5 / E6
+
+The production configuration (`.env.example`, `src/config.py`) is untouched: E5 lives only on its unmerged branch,
+E6 only as offline scripts. Fixed alongside: `scripts/compare_competition_runs.load()` (used by `run_decision.py`
+and `report_decision.py`) now reads prediction files as UTF-8; before, the scoring step of a decision run crashed
+on Windows (cp1252) after inference had finished. Inference, prompts and model settings are unchanged. On a Windows
+console `report_decision.py` also needs `PYTHONIOENCODING=utf-8` to print its report (it contains "→").

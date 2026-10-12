@@ -1,0 +1,83 @@
+{
+  "cases": 1488,
+  "responses": 1488,
+  "issues": {},
+  "tasks": {
+    "A": {
+      "cases": 1488,
+      "macro_f1": 0.9445741273277521,
+      "threshold": 0.6,
+      "passes_threshold": true,
+      "accuracy": 0.9448924731182796,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9821826280623608,
+          "recall": 0.8909090909090909,
+          "f1": 0.934322033898305,
+          "support": 495
+        },
+        "neutral": {
+          "precision": 0.9216417910447762,
+          "recall": 0.9919678714859438,
+          "f1": 0.9555125725338491,
+          "support": 498
+        },
+        "contradiction": {
+          "precision": 0.9363817097415507,
+          "recall": 0.9515151515151515,
+          "f1": 0.9438877755511023,
+          "support": 495
+        }
+      },
+      "evidence_score": 0.8737373737373737,
+      "evidence": {
+        "cases": 990,
+        "found": 865,
+        "without_gold_passage": 0
+      }
+    }
+  },
+  "languages": {
+    "A de->de": {
+      "cases": 159,
+      "macro_f1": 0.9336112715186471
+    },
+    "A de->fr": {
+      "cases": 149,
+      "macro_f1": 0.8859651999038188
+    },
+    "A de->it": {
+      "cases": 147,
+      "macro_f1": 0.9452433455651764
+    },
+    "A fr->de": {
+      "cases": 184,
+      "macro_f1": 0.9451526251526251
+    },
+    "A fr->fr": {
+      "cases": 196,
+      "macro_f1": 0.9332916944857242
+    },
+    "A fr->it": {
+      "cases": 189,
+      "macro_f1": 0.9677322156842393
+    },
+    "A it->de": {
+      "cases": 152,
+      "macro_f1": 0.9526677347556829
+    },
+    "A it->fr": {
+      "cases": 152,
+      "macro_f1": 0.9670685490588039
+    },
+    "A it->it": {
+      "cases": 160,
+      "macro_f1": 0.9608654854556494
+    }
+  },
+  "usage_mean_per_case": {
+    "input_tokens": 3868.1102150537636,
+    "output_tokens": 76.63575268817205,
+    "inference_time_ms": 1946.0524193548388
+  }
+}
