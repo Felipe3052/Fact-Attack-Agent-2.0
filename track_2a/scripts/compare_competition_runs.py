@@ -20,7 +20,7 @@ from src.competition_selection import distribution, quality_component, simulated
 
 
 def load(path):
-    rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
+    rows = [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
     if len({r['id'] for r in rows}) != len(rows):
         raise ValueError(f'Duplicate IDs: {path}')
     return {r['id']: r for r in rows}

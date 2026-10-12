@@ -58,6 +58,21 @@ class TestCompetitionMeasurement(unittest.TestCase):
         self.assertEqual(len(folds), 4)
         self.assertEqual(set(folds.values()), {0, 1})
 
+    def test_prediction_files_are_read_as_utf8_whatever_the_locale(self):
+        # run_decision.py / report_decision.py read predictions through load(); without an explicit encoding Windows
+        # read them as cp1252 ('Á' is C3 81 in UTF-8, and 0x81 is undefined in cp1252)
+        import os, subprocess, sys
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'predictions.jsonl'
+            path.write_text(json.dumps({'id': 'x-A', 'text': 'Á – Zürich « oui »'}, ensure_ascii=False) + '\n', encoding='utf-8')
+            env = {**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'utf-8', 'LC_ALL': 'C', 'PYTHONCOERCECLOCALE': '0'}
+            code = ('import sys; sys.path.insert(0, "scripts"); from compare_competition_runs import load; '
+                    f'print(load({str(path)!r})["x-A"]["text"])')
+            out = subprocess.run([sys.executable, '-X', 'utf8=0', '-c', code], cwd=Path(__file__).resolve().parents[1],
+                                 env=env, capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(out.returncode, 0, out.stderr)
+            self.assertEqual(out.stdout.strip(), 'Á – Zürich « oui »')
+
 
 if __name__ == '__main__':
     unittest.main()
