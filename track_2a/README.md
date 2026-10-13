@@ -10,10 +10,10 @@ or **contradicts (2)** a claim, and cites the booklet pages that justify the dec
 German, French and Italian.
 
 - **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
-  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims, run once): advanced **0.93–0.94** macro-F1,
-    Hit@5 **0.83–0.85**, 3,863 input tokens; beginner **0.966**, 1,758 input tokens
-  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.943**, Hit@5 **0.869**,
-    3,866 input tokens; beginner **0.984**, 1,732 input tokens
+  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.933** macro-F1,
+    Hit@5 **0.850**, 3,980 input tokens; beginner **0.966**, 1,758 input tokens
+  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.949**, Hit@5 **0.881**,
+    3,915 input tokens; beginner **0.984**, 1,732 input tokens
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
   **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 

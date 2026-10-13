@@ -18,10 +18,10 @@ French or Italian) and a claim (any of the three languages), it classifies the c
 token usage and inference time.
 
 On **booklets the system never saw** (our holdout: 90 claims on the 27 September 2026 vote, labels checked by a
-second person, run once), it reaches **macro-F1 0.93–0.94** and **evidence Hit@5 0.83–0.85** on the advanced task
-(booklet PDF) and **0.966** on the beginner task (reference text). On the whole official dataset (v1.1, 1,488 pairs,
-20 voting dates in 5 date-grouped folds) the same configuration scores **0.943 / Hit@5 0.869** and **0.984**, at
-3,866 / 1,732 input tokens and 62–76 output tokens per case, with processing time outside the LLM calls in the
+second person, used only to confirm the last two changes), it reaches **macro-F1 0.933** and **evidence Hit@5 0.850** on the advanced
+task (booklet PDF) and **0.966** on the beginner task (reference text). On the whole official dataset (v1.1, 1,488
+pairs, 20 voting dates in 5 date-grouped folds) the same configuration scores **0.949 / Hit@5 0.881** and **0.984**,
+at 3,915 / 1,732 input tokens and 60–62 output tokens per case, with processing time outside the LLM calls in the
 millisecond range. All scores come from the organisers' `evaluate.py` on the official CLI's output.
 
 The official score also weighs evidence, processing time and tokens (relative to the best team), so after the
@@ -29,8 +29,9 @@ organisers' Q&A we re-tuned for it (section 2.6). The two team members first opt
 their lines part by part, each choice decided by paired runs on the same cases: 8 instead of 12 pages (−31 % input
 tokens, −0.003 F1 on dev), evidence quoted from PyMuPDF pages and text blocks (Hit@5 0.73 → 0.81 on the same
 predictions), BM25 retrieval with the claim and its translation into the booklet language (macro-F1 0.930 → 0.945 on
-test), a start-up and parsing path that keeps the scored processing time in milliseconds, and, last, beginner-task
-references cut to the passages that match the claim (−30 % input tokens at equal macro-F1).
+test), a start-up and parsing path that keeps the scored processing time in milliseconds, beginner-task references
+cut to the passages that match the claim (−30 % input tokens at equal macro-F1) and, last, four compact label rules in
+the advanced prompt (macro-F1 0.942 → 0.949, Hit@5 0.867 → 0.881, +2.5 % tokens).
 
 The central finding for the challenge's research question: **sending a dozen well-chosen pages beats sending the
 whole booklet** — 0.946 vs. 0.730 macro-F1 on the same 150 test pairs, with ~10× fewer input tokens.
@@ -90,8 +91,11 @@ the window that best matches claim and vote title (plus the page heading).
 The selected pages are numbered `[P1]…[P8]`. The system prompt defines the three labels, tells the model to
 judge only against the passages (not world knowledge), to answer Neutral for topics or details the passages do
 not address, to check claims attributed to an actor only against that actor's text, and to read "recommends
-rejecting X" as supported when the Federal Council and Parliament recommend "No". Apertus answers with a small
-JSON object: three confidences, the label, and the ids of the pages that justify it.
+rejecting X" as supported when the Federal Council and Parliament recommend "No". For the advanced task, four
+compact label rules follow (~100 tokens): compare actor, action, object and decisive conditions; Entailment also for
+paraphrases, summaries and other languages, but never on unstated information; missing support is not a
+contradiction. Apertus answers with a small JSON object: three confidences, the label, and the ids of the pages that
+justify it.
 
 - **Evidence by id** guarantees verbatim booklet text with the correct page number and avoids paraphrased quotes.
 - **Short answers**: ~55 output tokens instead of ~150 for a JSON answer with reasoning and quotes, which more
@@ -193,14 +197,13 @@ with an Apertus request in flight.
 
 | Evaluation set | Task | Macro-F1 | Hit@5 | Input / output tokens | Apertus time (mean / p95) |
 |---|---|---:|---:|---:|---:|
-| **Holdout, unseen booklets** (90 pairs, run once) | Advanced | **0.933–0.944** | **0.833–0.850** | 3,863 / 67 | – |
+| **Holdout, unseen booklets** (90 pairs) | Advanced | **0.933** | **0.850** | 3,980 / 73 | – |
 | | Beginner | **0.966** | – | 1,758 / 60 | – |
-| **All 1,488 pairs** (5 date folds) | Advanced | **0.943** (folds 0.919–0.977) | **0.869** | 3,866 / 76 | 1.9 s / 3.0 s |
+| **All 1,488 pairs** (5 date folds) | Advanced | **0.949** (folds 0.919–0.980) | **0.881** | 3,915 / 60 | 1.6 s / 2.8 s |
 | | Beginner | **0.984** (folds 0.968–0.990) | – | 1,732 / 62 | 1.1 s / 1.3 s |
-| Former test split (398 pairs) | Advanced / Beginner | 0.942 / 0.982 | 0.833 | 3,979 / 1,741 input | – |
 
-The holdout's advanced range comes from two runs with identical settings (one label differs). Its errors are
-cross-lingual (de→fr, fr→de). Earlier milestones on the test split: 12 pages with whole cited pages 0.945 / Hit@5
+Without the label rules (E8): 0.943 / Hit@5 0.869 on all pairs, 0.933–0.944 / 0.833–0.850 on the holdout (two runs);
+E8 was checked there for regressions only (6 wrong labels before and after). The holdout's errors are cross-lingual. Earlier milestones on the test split: 12 pages with whole cited pages 0.945 / Hit@5
 0.341 at 5,598 tokens; 8 pages 0.930 / 0.727 at 3,877; + PyMuPDF evidence and query translation 0.945 / 0.839.
 Josip's comparison on all 1,488 advanced cases (k=12): baseline 0.948 / Hit@5 0.47, with query translation (R2)
 0.956 / 0.77.
@@ -247,11 +250,15 @@ The full booklet (up to ~70k tokens) is both the most expensive and the least ac
 | E2: beginner references > 6,000 chars cut to the matching passages | B 0.981 → 0.984, −30 % input tokens; holdout 0.955 → 0.966 | adopted |
 | E3: page windows of 2,000 instead of 3,000 characters | A 0.943 → 0.934 (6 / 18), all classes worse; −9 % tokens | rejected |
 | E4: evidence blocks ranked with the claim and its translation (offline replay) | Hit@5 0.869 → 0.873, not consistent across folds | rejected |
+| E5: section labels for navigation-bar pages | A F1 unchanged, Hit@5 +4–5 hits (noise: 7) | rejected |
+| E6: five best text blocks instead of whole pages (offline) | Hit@5 0.869 → 0.884, but via the vote title that opens every gold passage; passage body 0.843 → 0.766 | rejected |
+| E7/E8: four compact label rules in the advanced prompt | A 0.942 → 0.949 (22 fixed / 11 broken), Hit@5 0.867 → 0.881, +2.5 % tokens; holdout unchanged (2 / 2) | adopted |
+| E11: pages ranked 5–8 clipped to 1,500 characters | A 0.949 → 0.943 (17 / 26), Hit@5 −20 hits, −8 % tokens | rejected |
 
 Full tables: [docs/experiments.md](docs/experiments.md) and [docs/independent_experiments.md](docs/independent_experiments.md).
 Runs on 150 pairs carry about ±3 F1 points of sampling noise; close decisions were re-run on 450 pairs, the last
 ones on all pairs. A proxy measured without the model (is the gold page in the context, is the gold text still
-visible) predicted gains for E1 and E3 that the real runs did not show.
+visible) predicted gains for E1, E3 and E11 that the real runs did not show: the model needs the lower-ranked pages too.
 
 ### 5.4 What we learned about Apertus
 
@@ -261,6 +268,8 @@ visible) predicted gains for E1 and E3 that the real runs did not show.
 - **Apertus is over-confident.** Its self-reported confidences are 0 or 1 in 97–99 % of cases, and the probability of
   the label token is ~1.0 for wrong answers as well as for correct ones (41 wrong vs. 40 correct dev answers).
   Confidence thresholds cannot filter its errors.
+- **The remaining errors are reading errors, not retrieval errors.** The gold page is among the 8 selected pages in
+  97.9 % of the Entailment/Contradiction cases, and in 69 of 85 label errors.
 - **Speaker attribution was its main weakness — mostly a retrieval problem.** Claims attributed to the committee
   failed in 13.4 % of cases (2.2 % for Federal Council claims), and no prompt change helped. The speaker boost and
   Rule 0b brought them down to 7.4 %, the same rate as claims without a speaker.
@@ -274,18 +283,18 @@ visible) predicted gains for E1 and E3 that the real runs did not show.
 
 ## 6. Limitations
 
-- **Remaining errors** (advanced, 85 of 1,488 pairs): Entailment → Contradiction 34, Entailment → Neutral 20,
-  Contradiction → Neutral 19, Contradiction → Entailment 8, Neutral → Contradiction 3. Missing information is rarely
-  read as a contradiction. Claims about the consequences of a yes fail most often (15.5 %, against 3.6 % in the
-  beginner task, where the passage is given): their errors are mostly page selection.
-- **Evidence:** Hit@5 is 0.87 on all pairs. Of the 130 misses, 55 cite another page than the annotated one, 39 are
-  Neutral predictions (no evidence) and 36 cite the gold page without a matching item among the first five.
-- **Unseen booklets:** the holdout (0.93–0.94 advanced, 0.966 beginner) covers one vote with two proposals and 90
+- **Remaining errors** (advanced, 75 of 1,488 pairs): Entailment → Contradiction 33, Entailment → Neutral 14,
+  Contradiction → Neutral 13, Contradiction → Entailment 10, Neutral → Contradiction 4, Neutral → Entailment 1.
+  Claims about the consequences of a yes fail most often (15.5 % before E8; beginner task 3.6 %).
+- **Evidence:** Hit@5 is 0.88 on all pairs. Of the 130 misses before the label rules, 57 cited other pages of the
+  context than the gold page, 39 were Neutral predictions (no evidence) and 22 cited the gold page without a matching
+  item among the first five.
+- **Unseen booklets:** the holdout (0.933 advanced, 0.966 beginner) covers one vote with two proposals and 90
   claims written by us (± ~0.05); its errors are cross-lingual advanced claims. The jury's set may differ in layout
   and claim style.
 - **License:** the evidence quotes need PyMuPDF (AGPL-3.0), so the image as a whole is distributed under the AGPL.
 - **Development data:** all 20 dates of the dataset, including the former test split, have been used for decisions;
-  only the holdout was not.
+  the holdout only confirmed E2 and checked E8 for regressions.
 - **Layout:** committee pages headed only by a slogan stay unlabelled; tables and charts are read as plain text.
 - **Processing time and tokens** are measured by the organisers' proxy; our own numbers are estimates (client-side
   token counts, in-flight clock). Booklets outside the 60 dataset booklets are parsed at run time (in parallel).
@@ -309,13 +318,13 @@ runs the submission configuration through the official CLI and keeps predictions
 
 Settings: `.env.example` lists every setting with its default (a test keeps it equal to `src/config.py`), among them
 `NLI_TOP_K` (`8`), `PAGE_MAX_CHARS` (`3000`), `PROMPT_MODE` (`ids`), `RETRIEVAL_QUERY_MODE` (`union`),
-`EVIDENCE_POLICY` (`raw_pages_and_blocks`), `REFERENCE_MAX_CHARS` (`6000`), `NLI_WORKERS` (`4`).
+`EVIDENCE_POLICY` (`raw_pages_and_blocks`), `REFERENCE_MAX_CHARS` (`6000`), `A_COMPACT_PROMPT` (`true`), `NLI_WORKERS` (`4`).
 
 ---
 
 ## 8. Next steps
 
-1. The remaining Entailment → Contradiction errors (34 of 85 advanced errors) and the cross-lingual errors on unseen
+1. The remaining Entailment → Contradiction errors (33 of 75 advanced errors) and the cross-lingual errors on unseen
    booklets, both mostly with the gold page in the context; reasoning at lower cost (thinking: +0.02 F1 at ~11×
    latency).
 2. A larger holdout over several new votes, labelled independently, to narrow the ± 0.05 on unseen booklets.

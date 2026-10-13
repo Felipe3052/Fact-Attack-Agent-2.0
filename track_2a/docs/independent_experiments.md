@@ -488,3 +488,25 @@ Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20]
   (−8.4 %) does not make up for it (score scenarios negative for a token score ≤ 0.5). The switch stays in the code,
   off by default; the submission is unchanged. Like E1 and E3, it confirms that the model needs the full context of
   the lower-ranked pages as well.
+
+## 10. Holdout check of the final configuration (2026-10-13, task A only)
+
+- **Why:** E8 changed the task A prompt after the holdout run of section 4. The holdout was declared spent there, so
+  this run is a **no-regression check**, not a decision: E8 had already been adopted on the dataset (section 8), and
+  only a clear loss on the unseen booklets would have reverted it.
+- **Protocol:** `scripts/run_decision.py --data .cache/holdout_2026-09-27 --name HO_E8_compact_prompt --task A` at commit
+  `fd79d83` (no uncommitted source changes, `A_COMPACT_PROMPT=true` from `.env.example`). The rebuilt holdout cases,
+  labels and folds have the same SHA-256 as in section 4. Task B is unchanged by E8 and was not re-run. 0 failed cases.
+  Local paths of the run's worktree are replaced by `<worktree>` in `cli.log` and `run.json`.
+
+| Holdout, task A (90 claims) | HO_baseline | HO_E2_reference_6000 | **HO_E8_compact_prompt** |
+|---|---:|---:|---:|
+| Macro-F1 | 0.933 | 0.944 | **0.933** |
+| Evidence Hit@5 | 0.833 | 0.850 | **0.850** |
+| Wrong labels | 6 | 5 | 6 |
+| Labels fixed / broken by E8 | 2 / 2 | 1 / 2 | – |
+| Input / output tokens per case | 3,883 / 72 | 3,863 / 67 | 3,980 / 73 |
+
+- **Reading:** the compact prompt is neutral on the unseen booklets (within the one-label run-to-run variation of the
+  two earlier runs with identical settings) at +3 % input tokens, as on the dataset (+2.5 %). **E8 stays active.**
+  The configuration is frozen for the submission.
