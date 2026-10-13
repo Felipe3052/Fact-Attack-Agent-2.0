@@ -656,3 +656,30 @@ the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488
   case, task B 31 / 31 → 31 / 30 ms; F1, Hit@5 and tokens identical. The gain is small here because Docker Desktop
   gives the container 16 CPUs, so the parse pool reads the first booklet in ~3 s anyway (first request after 4.4 s, of
   which ~1.5 s container start); with fewer CPUs the page-by-page reading saves more.
+
+## 17. E17 — a tiered reference budget for task B (2026-10-13)
+
+- **Observation** (E2 against E15, per reference length): all of E15's F1 loss sits in references above 9,000
+  characters (524 of 1,488 cases, 498 of them neutral): 7 → 17 wrong labels, 12 of them neutral → contradiction. Up to
+  9,000 characters the 3,000-character cut was better than 6,000 (16 → 12 wrong). Computed offline from the two runs
+  before any new request: 0.9872, 19 wrong, 1,640 tokens.
+- **Switch:** `REFERENCE_MID_CHARS` (budget of references up to `REFERENCE_LONG_CHARS`, default 9,000; 0 = off) next to
+  `REFERENCE_MAX_CHARS` (longer references). Off by default; the test is in `tests/test_reference_focus.py`.
+- **Runs:** all 1,488 task B cases, official CLI and scorer, 0 failed cases, against E2 (`E2_reference_6000`).
+
+| Task B, 1,488 cases | E2 (submission) | E17a: ≤ 9,000 → 3,000, longer 6,000 | E17b: ≤ 9,000 → 3,000, longer 4,500 |
+|---|---:|---:|---:|
+| Macro-F1 | 0.9845 | **0.9872** | 0.9818 |
+| Wrong labels | 23 | **19** (5 fixed / 1 broken) | 27 (2 fixed / 10 broken vs E17a) |
+| Input tokens per case | 1,732 | **1,640** (−5 %) | 1,507 (−13 %) |
+| References > 9,000 characters (524): wrong / tokens | 7 / 2,228 | 7 / 2,227 | 15 / 1,848 |
+
+- E17a reproduces the offline computation exactly (0.9872, 19, 1,640). The cut of the long references is what costs F1
+  (E15 at 3,000, E17b at 4,500); the short and middle references do not need more than 3,000 characters.
+- **Holdout** (27 Sep 2026 booklets, 90 task B claims, `HO_E17a_mid3000` against `HO_E2_reference_6000`): macro-F1 0.966 → 0.966,
+  3 wrong labels both, input tokens 1,758 → 1,739.
+- **Decision: E17a adopted** (`REFERENCE_MID_CHARS=3000` is the default in `src/config.py` and both `.env.example`
+  files); E17b is rejected. The long references keep 6,000 characters. The gain is 92 tokens per case on the dataset,
+  so the token gap to the measured competitor stays (section 16).
+- `groups.json` of E17b is missing: the fold report crashed on a Windows paging-file error after scoring (the
+  predictions and `score.official.json` are complete).

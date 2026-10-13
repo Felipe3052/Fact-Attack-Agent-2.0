@@ -39,7 +39,7 @@ class TestReferenceFocus(unittest.TestCase):
     def run_premise(self, max_chars, claim=CLAIM, translation=None):
         client = RecordingClient(translation)
         engine = ClaimVerificationEngine(apertus_client=client)
-        with tempfile.TemporaryDirectory() as directory, patch.object(config, "REFERENCE_MAX_CHARS", max_chars), \
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "REFERENCE_MAX_CHARS", max_chars), patch.object(config, "REFERENCE_MID_CHARS", 0), \
                 patch.object(config, "QUERY_TRANSLATION_CACHE_DIR", Path(directory)), \
                 patch.object(config, "RETRIEVAL_QUERY_MODE", "union"):
             result = engine.verify_premise(claim=claim, reference=REFERENCE, case_id="b-1")
@@ -60,6 +60,15 @@ class TestReferenceFocus(unittest.TestCase):
         self.assertEqual(sent, [c for c in order if c in sent])  # document order
         self.assertEqual(client.translation_calls, 0)  # same language: no translation
         self.assertEqual(result.tokens_total, 55)
+
+    def test_tiered_budget_applies_only_up_to_the_long_threshold(self):
+        engine = ClaimVerificationEngine(apertus_client=RecordingClient(None))
+        with patch.object(config, "REFERENCE_MAX_CHARS", 6000), patch.object(config, "REFERENCE_MID_CHARS", 3000),                 patch.object(config, "REFERENCE_LONG_CHARS", 9000):
+            self.assertEqual(engine._reference_budget(5000), 3000)
+            self.assertEqual(engine._reference_budget(9000), 3000)
+            self.assertEqual(engine._reference_budget(9001), 6000)
+        with patch.object(config, "REFERENCE_MAX_CHARS", 6000), patch.object(config, "REFERENCE_MID_CHARS", 0):
+            self.assertEqual(engine._reference_budget(5000), 6000)
 
     def test_other_language_claim_uses_its_translation_and_counts_its_tokens(self):
         claim = "Pour une sous-location, l'accord écrit du bailleur sera désormais nécessaire."

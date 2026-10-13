@@ -409,7 +409,14 @@ class ClaimVerificationEngine:
         translated, prompt_tokens, completion_tokens, receipt = self._query_translator.get(claim, language, target_language)
         return translated, (prompt_tokens, completion_tokens), receipt
 
-    def _focus_reference(self, chunks: List[str], claim: str, claim_language: Optional[str]):
+    @staticmethod
+    def _reference_budget(length: int) -> int:
+        """Characters a reference of this length may keep (REFERENCE_MAX_CHARS, or REFERENCE_MID_CHARS up to REFERENCE_LONG_CHARS)."""
+        if config.REFERENCE_MID_CHARS and length <= config.REFERENCE_LONG_CHARS:
+            return config.REFERENCE_MID_CHARS
+        return config.REFERENCE_MAX_CHARS
+
+    def _focus_reference(self, chunks: List[str], claim: str, claim_language: Optional[str], budget: Optional[int] = None):
         """
         Task B, reference longer than REFERENCE_MAX_CHARS: its first chunk (title, opening) plus the chunks that best
         match the claim, in document order, up to REFERENCE_MAX_CHARS characters. Ranked like the booklet pages: BM25
@@ -425,10 +432,11 @@ class ClaimVerificationEngine:
                 queries.append(translated)
         ranked = PassageRetriever([{"text": c, "index": i} for i, c in enumerate(chunks)]).retrieve_hybrid(
             queries[0], top_k=len(chunks), query_variants=queries[1:])
+        budget = budget or config.REFERENCE_MAX_CHARS
         keep, used = {0}, len(chunks[0])
         for p in ranked:
             i = p["index"]
-            if i not in keep and used + len(chunks[i]) <= config.REFERENCE_MAX_CHARS:
+            if i not in keep and used + len(chunks[i]) <= budget:
                 keep.add(i)
                 used += len(chunks[i])
         return [chunks[i] for i in sorted(keep)], usage
@@ -701,8 +709,9 @@ class ClaimVerificationEngine:
 
         if self.prompt_mode in ("compact", "ids"):
             texts, usage = chunk_reference(reference), (0, 0)
-            if config.REFERENCE_MAX_CHARS and len(reference) > config.REFERENCE_MAX_CHARS:
-                texts, usage = self._focus_reference(texts, claim, claim_language)
+            budget = self._reference_budget(len(reference))
+            if config.REFERENCE_MAX_CHARS and len(reference) > budget:
+                texts, usage = self._focus_reference(texts, claim, claim_language, budget)
             chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in texts]
             result = self._compact_predict(
                 passages=chunks,

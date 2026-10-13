@@ -133,6 +133,11 @@ LEGAL_TEXT_MAX_PAGES = int(os.getenv("LEGAL_TEXT_MAX_PAGES", "0"))
 # (0 = always the whole reference). Experiment E2: all 1,488 task B cases macro-F1 0.981 -> 0.984 at -30 % input
 # tokens; untouched holdout (27 Sep 2026 booklets, 90 claims) 0.955 -> 0.966 at -13 %
 REFERENCE_MAX_CHARS = int(os.getenv("REFERENCE_MAX_CHARS", "6000"))
+# Task B, tiered budget (experiment E17a, adopted: 1,488 cases macro-F1 0.9845 -> 0.9872, input tokens -5 %): a reference of at most REFERENCE_LONG_CHARS characters is cut
+# to REFERENCE_MID_CHARS instead of REFERENCE_MAX_CHARS (0 = one budget for every length). References above
+# REFERENCE_LONG_CHARS are almost all neutral claims whose cut lost F1 in E15, so they keep the larger budget.
+REFERENCE_MID_CHARS = int(os.getenv("REFERENCE_MID_CHARS", "3000"))
+REFERENCE_LONG_CHARS = int(os.getenv("REFERENCE_LONG_CHARS", "9000"))
 # Speaker hint: tell the model which passages are the named side's own text
 SPEAKER_HINT = os.getenv("SPEAKER_HINT", "false").lower() in ("true", "1", "yes")
 
