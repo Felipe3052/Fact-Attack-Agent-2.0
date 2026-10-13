@@ -510,3 +510,149 @@ Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20]
 - **Reading:** the compact prompt is neutral on the unseen booklets (within the one-label run-to-run variation of the
   two earlier runs with identical settings) at +3 % input tokens, as on the dataset (+2.5 %). **E8 stays active.**
   The configuration is frozen for the submission.
+
+## 11. E12 — contents-guided part selection: the booklet part each claim names (2026-10-13)
+
+- **Origin of the idea:** a competing team's public repository describes choosing the booklet part a claim's opening
+  names. The implementation here is our own (`src/part_context.py`, switch `PART_CONTEXT`, first named
+  `SECTION_ROUTE`, which the E12 run folders still record); no code was taken over.
+- **Finding behind it:** D0 showed that the remaining task A errors are reading errors with the gold page in context;
+  the 8 retrieved pages also carry text of other parts and votes. The dataset's claims name their source in the
+  opening ("Laut der Zusammenfassung …", "Le comité estime …", "Se il voto viene accettato …"), and every booklet's
+  contents page lists, per vote, the pages of summary, detail, arguments and voting text.
+- **Part selection:** claim opening → part (summary, detail for consequences of a yes, committee, Federal Council, voting text;
+  the earliest cue wins); contents page → page ranges per vote (navigation bars on the summary pages ignored,
+  two-page contents merged, start pages checked against the page headings); vote matched by the words of its title,
+  also against the first lines of its summary and detail pages; the arguments split by the parser's speaker labels.
+  Context: the part's pages in reading order, at most 6,000 characters (best pages by BM25 first when the part is
+  longer, the claim translated only then). Claims without a part keep the regular retrieval.
+- **Offline (no API):** contents read in 60/60 booklets, a part found for 1,476 of 1,488 claims, the vote for all;
+  gold-word coverage of the context 0.956 vs 0.894 for the 8 retrieved pages (cases below 0.8: 19 vs 206).
+- **Predeclared bar** (against E7_compact, the submission): macro-F1 ≥ −0.005, Hit@5 ≥ 872, input tokens ≥ −40 %.
+
+| Task A, 1,488 cases | E7_compact (submission) | **E12 part selection** |
+|---|---:|---:|
+| Macro-F1 | 0.949 | **0.968** (date bootstrap 95 %: +0.005 … +0.035) |
+| Macro-F1 de-duplicated / cross-language | 0.953 / 0.949 | 0.965 / 0.971 |
+| Evidence Hit@5 (990) | 872 | **965** (110 fixed / 17 broken) |
+| Input / output tokens per case | 3,915 / 60 | **1,750 / 59** (−55 %) |
+| Labels fixed / broken | – | 56 / 29 (noise floor of an unchanged rerun: 11 / 22) |
+| Holdout (new booklets, 90; a part for all) | 0.933 / Hit@5 0.850 / 3,980 tokens | **0.956 / 0.933 / 1,751** (6 → 4 wrong) |
+
+- Folds: 4 of 5 better (fold 3 +0.059, fold 4 +0.040; fold 2 −0.007). Language pairs: 8 of 9 better, de→de −0.021.
+- **Decision: passes every criterion.** Selecting the part the claim names gives the model less distraction and the
+  evidence the gold part, at less than half the tokens — the clearest single gain of the project.
+
+## 12. E13 — the system prompt's rules in fewer words (2026-10-13, rejected)
+
+- **Hypothesis:** with the part context of E12 the fixed prompt (~700 tokens) is the largest token item; the same rules,
+  labels and JSON schema in 1,766 instead of 2,618 characters (`PROMPT_LEAN`) save ~210 tokens per case in both tasks.
+- **Runs:** task A with the part context (E12 settings) against E12, task B against E2_reference_6000 (the submission), all 1,488
+  cases each, 0 failed cases.
+
+| | Macro-F1 | Hit@5 | Labels fixed / broken | Input tokens |
+|---|---:|---:|---:|---:|
+| Task A: E12 → E13 | 0.968 → 0.952 | 0.975 → 0.986 | 16 / 40 | 1,750 → 1,533 |
+| Task B: E2 → E13 | 0.984 → ~0.94 (23 → 91 wrong) | – | 4 / 72 | 1,732 → 1,515 |
+
+- The new errors turn towards contradiction (task A 0→2: 26, 1→2: 13; task B 0→2: 45, 1→2: 25), the same failure as
+  the earlier `PROMPT_SHORT`. Apertus depends on the exact wording of the full checklist.
+- **Decision: rejected** (bar: F1 ≥ −0.005). The full prompt stays; the switch stays off.
+
+## 13. E14 — a smaller part budget (2026-10-13, rejected) and adoption of E12
+
+- **Hypothesis:** with `PART_CONTEXT_CHARS=4000` instead of 6,000 the long parts (detail, voting text) keep their best
+  pages only, for ~120 fewer input tokens per case (offline: gold-word coverage 0.910 → 0.873).
+- **Result** (all 1,488 task A cases against E12): macro-F1 0.968 → 0.948, Hit@5 0.975 → 0.940, labels 7 fixed /
+  37 broken, input tokens 1,750 → 1,636 (−6.5 %). **Rejected:** the model needs the whole part.
+- **Adopted: E12** (`PART_CONTEXT=true`, `PART_CONTEXT_CHARS=6000`) is now the default in `src/config.py` and both
+  `.env.example` files, so the submission image runs it. The full system prompt stays (E13).
+
+## 14. Before / after in detail: submission of 13 October vs. part selection (2026-10-13)
+
+Before = `main` at the merge of PR #10 (E7/E8, 8 retrieved pages; run `E7_compact`); after = E12 (`E12_part_context`).
+Task B is unchanged (E2, run `E2_reference_6000`). All numbers from the official scorer on the official CLI's output.
+
+| Task A, all 1,488 pairs | Before | After |
+|---|---:|---:|
+| Macro-F1 (de-duplicated / cross-language) | 0.949 (0.953 / 0.949) | **0.968** (0.965 / 0.971) |
+| F1 entailment / neutral / contradiction | 0.939 / 0.969 / 0.940 | 0.975 / 0.972 / 0.956 |
+| Evidence Hit@5 | 0.881 (872 / 990) | **0.975** (965 / 990) |
+| Wrong labels | 75 | **48** |
+| Input tokens mean / median / p95 | 3,915 / 3,848 / 5,223 | **1,750** / 1,580 / 2,531 |
+| Output tokens | 60 | 59 |
+| Apertus time mean / p95 | 1.6 s / 2.8 s | 1.0 s / 1.2 s |
+| Time outside model calls (CLI estimate) | 2.5 ms | 1.7 ms |
+
+| Wrong labels by claim type (task A) | Before | After |
+|---|---:|---:|
+| Consequences of a yes (240) | 31 | 12 |
+| Committee (275) | 17 | 3 |
+| Summary (299) | 12 | 10 |
+| Federal Council (438) | 3 | 1 |
+| Voting text (214) | 10 | **22** |
+
+The voting-text claims are the new weak spot: long legal texts exceed the 6,000-character budget (E14 shows that a
+smaller budget hurts everywhere, so a better selection inside long voting texts is the next step, not a cut).
+
+| Task A by fold (F1 / Hit@5) | Before | After |
+|---|---:|---:|
+| 0 | 0.971 / 0.908 | 0.975 / 0.967 |
+| 1 | 0.950 / 0.879 | 0.954 / 0.953 |
+| 2 | 0.980 / 0.904 | 0.973 / 0.973 |
+| 3 | 0.919 / 0.874 | 0.978 / 0.995 |
+| 4 | 0.919 / 0.838 | 0.958 / 0.985 |
+
+| Task B (unchanged), all 1,488 pairs | B0 (earlier submission) | **E2 (submission)** | E13 lean prompt (rejected) |
+|---|---:|---:|---:|
+| Macro-F1 (cross-language) | 0.981 (0.979) | **0.984** (0.984) | 0.940 (0.950) |
+| F1 entailment / neutral / contradiction | 0.989 / 0.983 / 0.972 | 0.987 / 0.990 / 0.977 | 0.939 / 0.963 / 0.916 |
+| Wrong labels (C→N, E→C, C→E, N→C) | 28 (11, 5, 6, 6) | 23 (9, 7, 6, 1) | 91 (8, 52, 3, 26) |
+| Input tokens mean / p95 | 2,482 / 5,023 | 1,732 / 2,349 | 1,515 / 2,130 |
+| Folds | 0.976–0.985 | 0.968–0.990 | 0.894–0.965 |
+| Holdout | 0.955 | 0.966 | – |
+
+**Image check** (`fact-attack:part`, built from this branch): 60/60 booklets pre-parsed, 160 tests pass in the
+container with `--network none --read-only`; jury-style run on 27 mixed cases against the real endpoint: exit 0, 27/27
+records, every task A label identical to the E12 runs (the sample happens to contain 3 of E12's 29 broken cases, so its
+15-case F1 is 0.77; both minimum thresholds pass), 1,808 input tokens per case.
+
+## 15. E15 / E16 — fewer task B tokens (2026-10-13, both rejected)
+
+The measured competitor (section 16) answers task B with ~824 tokens per case against our 1,794, so task B tokens were
+the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488 task B cases, against E2).
+
+| Task B, 1,488 cases | E2 (submission) | E15: references ≤ 3,000 chars | E16: label-only answer |
+|---|---:|---:|---:|
+| Macro-F1 | **0.9845** | 0.9805 | 0.8705 |
+| Wrong labels (fixed / broken) | 23 | 29 (7 / 13) | 188 (12 / 177; 172 of them N→C) |
+| Input / output tokens per case | 1,732 / 62 | 1,375 / 70 | 1,578 / 15 |
+
+- E15 cuts long references to their best-matching passages at 3,000 instead of 6,000 characters: −21 % input tokens,
+  but −0.004 macro-F1. Rejected (F1 loss).
+- E16 (`B_LABEL_ONLY`, off) keeps the prompt and drops only the confidences and passage ids from the answer schema.
+  Without having to state `p_neutral`, Apertus labels unrelated references as contradiction: the confidences act as a
+  small reasoning scaffold, not just as output. Rejected.
+- With E13 (shorter rules) this closes the task B token question: with Apertus 70B the full prompt, the confidences
+  and 6,000-character references are all needed for the 0.984.
+
+## 16. Processing time and robustness (2026-10-13)
+
+- **Page-by-page reading of new booklets (`QUICK_PARTS=true`, `src/quick_booklet.py`).** A booklet that is not parsed
+  yet costs 4.5–7.7 s to parse in full, and the first one is not hidden behind any request (local time is scored). With
+  part selection a case needs only the contents (PyMuPDF text, fast), the headings and the 2–6 pages of its part (pypdf,
+  the model's text). Those are read on their own while the full parse runs on in the background; later cases and
+  claims without a part use the full parse. **Equality check** (no API) over all 1,488 dataset and 90 holdout task A
+  cases, full parse against page-by-page reading: 1,566 identical in passages, page texts, part labels and evidence
+  source pages, 0 different, 12 without a part on both paths. A booklet once opened serves further cases in 2 ms (median).
+- **Lazy imports** in the CLI (`rich`, `hf_dataset`): not needed by the official batch run.
+- **Model fallback.** The endpoint answers a model it does not serve with an error (CSCS: an empty HTTP 403, like a
+  refused key); without a fallback every case would come back neutral and the submission would fall below the
+  thresholds. Now the client reads `/models` once and switches to the best Apertus v1.5 model listed (70B-thinking,
+  70B, 8B-thinking, 8B); a listed model or an unreadable list leaves the error as it is. `MODEL` is accepted as an alias
+  of `LLM_NAME`. Checked live: a wrong model name switches to Apertus-v1.5-70B-thinking and answers normally.
+- **Measured in the image** (holdout, 3 new booklets, real endpoint through a token-counting proxy, local time = wall
+  clock of `docker run` minus time with a request in flight, two alternating runs each): task A 79 / 75 → 72 / 70 ms per
+  case, task B 31 / 31 → 31 / 30 ms; F1, Hit@5 and tokens identical. The gain is small here because Docker Desktop
+  gives the container 16 CPUs, so the parse pool reads the first booklet in ~3 s anyway (first request after 4.4 s, of
+  which ~1.5 s container start); with fewer CPUs the page-by-page reading saves more.

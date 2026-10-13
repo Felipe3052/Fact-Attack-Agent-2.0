@@ -15,9 +15,6 @@ if str(_pkg_root) not in sys.path:
     sys.path.insert(0, str(_pkg_root))
 
 import typer
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 
 if sys.platform == "win32":
     try:
@@ -34,10 +31,22 @@ from src.inference import ClaimVerificationEngine, PredictionResult
 from src.apertus_client import ApertusClient
 from src import config
 from src.text_utils import guess_language
-from src.hf_dataset import _download
 
 app = typer.Typer(help="Hack Apertus Track 2A (OST) - Voting Booklet NLI & Claim Verification")
-console = Console(legacy_windows=False)
+
+
+class _LazyConsole:
+    """rich's Console, imported on first use: the official batch run never needs it (~0.1 s of start-up, scored)."""
+    _console = None
+
+    def __getattr__(self, name):
+        if _LazyConsole._console is None:
+            from rich.console import Console
+            _LazyConsole._console = Console(legacy_windows=False)
+        return getattr(_LazyConsole._console, name)
+
+
+console = _LazyConsole()
 _entrypoint_started = None
 
 
@@ -116,6 +125,9 @@ def predict(
         official_data = result.to_official_dict(case_id=case_id)
         print(json.dumps(official_data, indent=2, ensure_ascii=False))
         return
+
+    from rich.panel import Panel
+    from rich.table import Table
 
     console.print(Panel(f"[bold cyan]Verifying Claim with Apertus[/bold cyan]\n[italic]\"{claim}\"[/italic]", expand=False))
 
@@ -374,7 +386,7 @@ def run_batch(
             else:
                 out_payload = official_results if len(official_results) > 1 else official_results[0]
                 out_f.write(json.dumps(out_payload, indent=2, ensure_ascii=False) + "\n")
-        console.print(f"[bold green]Successfully processed {len(official_results)} case(s) -> {output_path}[/bold green]")
+        print(f"Successfully processed {len(official_results)} case(s) -> {output_path}")
     else:
         if config.OFFICIAL_IO:
             for prediction in official_results:
@@ -431,6 +443,9 @@ def compare(
     """
     Compare 'retrieval' vs 'full' document strategies on tokens, latency, and Macro-F1.
     """
+    from rich.panel import Panel
+    from rich.table import Table
+
     console.print(Panel("[bold]Comparing Strategies: 'Retrieval' vs 'Full Document'[/bold]"))
     from src.evaluator import BenchmarkEvaluator  # lazy: sklearn is slow to import
 
