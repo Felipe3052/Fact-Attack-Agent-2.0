@@ -42,7 +42,28 @@ def run(client, escalate_below=0.98, short_chars=2000):
         return engine.verify_premise(claim=CLAIM, reference=REFERENCE, case_id="b-1")
 
 
+class FailingFullClient(CascadeClient):
+    def infer(self, context, claim, passages=None, **kwargs):
+        self.full_calls += 1
+        return NLIOutput(label=1, reasoning="API Error", error="api: boom", tokens_prompt=0, tokens_completion=0,
+                         tokens_total=0)
+
+
 class TestTaskBCascade(unittest.TestCase):
+    def test_failed_second_call_keeps_the_first_answer(self):
+        client = FailingFullClient((0.1, 0.2, 0.7), first_label=2)
+        result = run(client)
+        self.assertEqual((client.short_calls, client.full_calls), (1, 1))
+        self.assertEqual(result.label, 2)  # not the neutral fallback of the failed call
+        self.assertEqual(result.tokens_total, 302)
+
+    def test_failed_first_and_second_call_fall_back_to_neutral(self):
+        client = FailingFullClient((0.0, 0.0, 0.0), first_label=1)
+        client.infer_label = lambda *a, **k: NLIOutput(label=1, reasoning="API Error", error="api: boom")
+        result = run(client)
+        self.assertEqual(result.label, 1)
+        self.assertEqual(client.full_calls, 1)
+
     def test_sure_short_answer_is_final_and_costs_one_call(self):
         client = CascadeClient((0.0, 1.0, 0.0))
         result = run(client)

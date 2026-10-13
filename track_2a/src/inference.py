@@ -851,10 +851,18 @@ class ClaimVerificationEngine:
                     out.error or max(out.p_entail, out.p_neutral, out.p_contra) < config.B_ESCALATE_BELOW):
                 first = out
                 out = self.client.infer(context="", claim=model_claim, claim_language=claim_language, passages=texts)
-                out.tokens_prompt += first.tokens_prompt
-                out.tokens_completion += first.tokens_completion
-                out.tokens_total += first.tokens_total
-                out.latency_ms += first.latency_ms
+                if out.error and not first.error:
+                    # the second call failed: the first call's readable answer is better than a neutral fallback
+                    first.tokens_prompt += out.tokens_prompt
+                    first.tokens_completion += out.tokens_completion
+                    first.tokens_total += out.tokens_total
+                    first.latency_ms += out.latency_ms
+                    out = first
+                else:
+                    out.tokens_prompt += first.tokens_prompt
+                    out.tokens_completion += first.tokens_completion
+                    out.tokens_total += first.tokens_total
+                    out.latency_ms += first.latency_ms
         elif self.prompt_mode == "ids":
             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
