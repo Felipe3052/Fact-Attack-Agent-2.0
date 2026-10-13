@@ -158,9 +158,11 @@ with an Apertus request in flight.
   references cut to the matching passages (−30 %, 2.4); condensed prompts, narrower windows, a smaller part budget and
   fewer legal-text pages cost F1 and were rejected (5.3).
 - **Processing time:** a standard-library HTTP client (~1 s less start-up), four cases in flight, uncached booklets
-  parsed by a process pool started first: ~2–6 ms per case with cached booklets, ~22 ms on new ones (CLI estimate).
+  parsed by a process pool started first; until a new booklet is parsed, a case reads only its part's pages
+  (identical context and evidence in 1,566/1,566 cases). Holdout, new booklets: ~70 ms (A) / ~30 ms (B) per case.
 - **Robustness:** a broken case line, an unreadable page, an API error or a stuck parser costs at most its own case,
-  returned as a valid Neutral record; the exit code stays 0.
+  returned as a valid Neutral record; the exit code stays 0. If the endpoint does not serve our model, the client
+  switches once to the best Apertus v1.5 model it lists instead of failing every case.
 
 ---
 
@@ -262,6 +264,7 @@ names is the cheapest and the most accurate.
 | **E12: contents-guided part selection (2.2)** | A 0.949 → 0.968 (56 / 29; date bootstrap +0.005 … +0.035), Hit@5 0.881 → 0.975, −55 % tokens; holdout 0.933 → 0.956 | **adopted** |
 | E13: the system prompt's rules in fewer words (−210 tokens) | A 0.968 → 0.952 (16 / 40), B 0.984 → ~0.94; errors turn to contradiction | rejected |
 | E14: part budget 4,000 instead of 6,000 characters | A 0.968 → 0.948 (7 / 37), Hit@5 0.975 → 0.940, −6.5 % tokens | rejected |
+| E15 / E16: task B references cut at 3,000 chars / label-only answer | B 0.984 → 0.980 (−21 % tokens) / 0.871 (no confidences: N→C) | rejected |
 
 Full tables: [docs/experiments.md](docs/experiments.md) and [docs/independent_experiments.md](docs/independent_experiments.md).
 Runs on 150 pairs carry about ±3 F1 points of sampling noise; close decisions were re-run on 450 pairs, the last
@@ -301,7 +304,6 @@ visible) predicted gains for E1, E3 and E11 that the real runs did not show: the
 - **License:** the evidence quotes need PyMuPDF (AGPL-3.0), so the image as a whole is distributed under the AGPL.
 - **Development data:** all 20 dates of the dataset, including the former test split, have been used for decisions;
   the holdout only confirmed E2 and checked E8 and E12 for regressions.
-- **Layout:** tables and charts are read as plain text.
 - **Processing time and tokens** are measured by the organisers' proxy; our own numbers are estimates (client-side
   token counts, in-flight clock). Booklets outside the 60 dataset booklets are parsed at run time (in parallel).
 - **Not political advice:** outputs describe the relationship between a claim and the official booklet only.
@@ -340,6 +342,5 @@ Settings: `.env.example` lists every setting with its default (a test keeps it e
 
 ## License
 
-Code: Apache License 2.0 ([LICENSE](../LICENSE)). Documentation, including this report: Creative Commons
-Attribution 4.0 (CC-BY-4.0), as required by the Hack Apertus terms (section 6). The image includes PyMuPDF (AGPL-3.0),
-so the image as a whole is distributed under the AGPL-3.0, with this public repository as its complete source.
+Code: Apache-2.0 ([LICENSE](../LICENSE)); this report: CC-BY-4.0 (Hack Apertus terms, section 6). With PyMuPDF
+(AGPL-3.0) the image as a whole is AGPL-3.0, with this repository as its complete source.

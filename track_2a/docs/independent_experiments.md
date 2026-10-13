@@ -651,3 +651,8 @@ the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488
   thresholds. Now the client reads `/models` once and switches to the best Apertus v1.5 model listed (70B-thinking,
   70B, 8B-thinking, 8B); a listed model or an unreadable list leaves the error as it is. `MODEL` is accepted as an alias
   of `LLM_NAME`. Checked live: a wrong model name switches to Apertus-v1.5-70B-thinking and answers normally.
+- **Measured in the image** (holdout, 3 new booklets, real endpoint through a token-counting proxy, local time = wall
+  clock of `docker run` minus time with a request in flight, two alternating runs each): task A 79 / 75 → 72 / 70 ms per
+  case, task B 31 / 31 → 31 / 30 ms; F1, Hit@5 and tokens identical. The gain is small here because Docker Desktop
+  gives the container 16 CPUs, so the parse pool reads the first booklet in ~3 s anyway (first request after 4.4 s, of
+  which ~1.5 s container start); with fewer CPUs the page-by-page reading saves more.
