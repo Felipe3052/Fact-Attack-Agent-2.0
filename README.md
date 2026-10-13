@@ -202,8 +202,9 @@ make test         # unit tests (no API calls)
 make web          # Streamlit app at http://localhost:8501
 ```
 
-`make run` runs our own benchmark on the test split (macro-F1 ≈ 0.93 with 8 pages; temperature 0, so runs differ by
-at most a few pairs). `NLI_DATASET=data/demo_dataset.jsonl make run` runs the 28-pair demo set instead (~40 s, ≈ 0.91).
+`make run` runs our own benchmark (task A) on the 398-pair test split (macro-F1 0.972, 1,800 input tokens per case,
+checked on a fresh clone; temperature 0, so runs differ by at most a few pairs). The dataset is downloaded when the
+run starts (the image holds no gold labels), so `make run` needs network access.
 
 The main defaults (override via environment variables or `.env`; [`.env.example`](.env.example) lists every setting
 with its default, and a test keeps that file equal to the code):
@@ -269,8 +270,9 @@ reported as failures; prediction does not download a booklet or substitute gold 
 Each case yields `{"id", "label", "label_name", "evidence": [{"page", "text"}], "metrics": {"input_tokens",
 "output_tokens", "inference_time_ms"}}`; evidence is empty for neutral, and its page is `null` for a reference text. The claim language is detected
 automatically, booklet paths are resolved robustly, and a failing case is reported on stderr and returned as a
-valid neutral record so IDs remain complete. A batch with an operational failure
-exits nonzero and writes diagnostics; neutral fallback is not a successful classification.
+valid neutral record so IDs remain complete; failing cases do not change the exit code (a transient endpoint problem
+must not invalidate the whole run). Only an unreadable input (missing file, unsupported format) exits nonzero. For
+task B the first, short answer is kept when the second call fails.
 Source-derived caches are created in `/tmp`; the input mount remains unchanged.
 
 ---
