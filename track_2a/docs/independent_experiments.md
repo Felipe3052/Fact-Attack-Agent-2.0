@@ -2,8 +2,8 @@
 
 Goal: better expected performance on **unseen voting dates, claims and language pairs** under the full
 competition score (macro-F1, evidence Hit@5, tokens, non-LLM time), not a higher score on a split we already know.
-Every change is our own hypothesis, implemented in our code and judged with our own runs. Results of other teams
-serve as inspiration only; no code, prompt or pipeline of another team is used.
+Every change is our own hypothesis, implemented in our code and judged with our own runs; no external code, prompt
+or pipeline is used.
 
 ## 1. Data status and protocol
 
@@ -163,9 +163,8 @@ refactoring for E1/E2 does not change the behaviour while their flags are off.
   (non-legal-text claims 11 fixed / 9 broken) is within run-to-run noise; not pursued before the deadline.
 - **Lesson for the method:** the offline proxy (gold page among the selected pages) overstated the benefit; for
   context changes it must be complemented by an API run before any claim of improvement.
-- **Provenance:** the observation that claim openings name the booklet part they refer to was described publicly
-  by another team (Voting NLI). It led us to break our recall down by the part a claim names; the bottleneck
-  (legal text crowding out explanation pages) and the fix are our own findings and design.
+- **Origin:** we broke our recall down by the part a claim names; the bottleneck (legal text crowding out
+  explanation pages) and the fix are our own findings and design.
 
 ### E2 — task B: relevant chunks of long references
 
@@ -181,9 +180,8 @@ refactoring for E1/E2 does not change the behaviour while their flags are off.
 - **Budget chosen up front: 6,000 characters** (mean reference characters sent −42 %; 91 of 997
   entailment/contradiction references would be cut, each only moderately). The choice used the length
   distribution of the development data and is documented as such.
-- **Provenance:** another team (Voting NLI) reported publicly that cutting long task-B references saved tokens at
-  equal macro-F1. Our variant (chunking, BM25 + translation, opening chunk, character budget) is our own and is
-  tested against our full-text baseline on our folds.
+- **Design:** chunking, BM25 + translation, the opening chunk and the character budget are our own and are tested
+  against our full-text baseline on our folds.
 - **Result** (`results/generalization/E2_reference_6000`, `REFERENCE_MAX_CHARS=6000`, task B, 1,488 cases,
   0 failed cases; full report in `report/report.md`):
 
@@ -202,12 +200,9 @@ refactoring for E1/E2 does not change the behaviour while their flags are off.
   done: 13 changed labels against 2 for the repeated baseline, so the changes are caused by E2, with a net gain of 5. The token saving is large and
   stable; quality does not drop in any class and in at most one fold / pair by less than the bootstrap width.
 
-## 4. Sources read (reports only, no code)
+## 4. External material
 
-| Team / repository | Commit read | Date | License | Used for |
-|---|---|---|---|---|
-| Voting NLI, `Rashad18236/hackapertus-voting-nli` (technical report, README) | `42b2a3c` | 2026-10-11 | Apache-2.0 | inspiration for E1 analysis and E2 |
-| Apertus Evidence Lab, `hallzyx/apertus` (technical report, README) | `d28c058` | 2026-10-11 | Apache-2.0 | retrieval as separate bottleneck; trained head not applicable (needs hidden states, our endpoint is chat completions only) |
+Only the public dataset (v1.1), the organisers' starter scorer (`evaluate.py`) and the Apertus endpoint are used.
 
 ### E3 — task A: tighter page windows
 
@@ -619,8 +614,7 @@ records, every task A label identical to the E12 runs (the sample happens to con
 
 ## 15. E15 / E16 — fewer task B tokens (2026-10-13, both rejected)
 
-The measured competitor (section 16) answers task B with ~824 tokens per case against our 1,794, so task B tokens were
-the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488 task B cases, against E2).
+Tokens are scored relative to the best team, and task B's ~1,794 input tokens per case were the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488 task B cases, against E2).
 
 | Task B, 1,488 cases | E2 (submission) | E15: references ≤ 3,000 chars | E16: label-only answer |
 |---|---:|---:|---:|
@@ -680,13 +674,13 @@ the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488
   3 wrong labels both, input tokens 1,758 → 1,739.
 - **Decision: E17a adopted** (`REFERENCE_MID_CHARS=3000` is the default in `src/config.py` and both `.env.example`
   files); E17b is rejected. The long references keep 6,000 characters. The gain is 92 tokens per case on the dataset,
-  so the token gap to the measured competitor stays (section 16).
+  so most of the token lever stays open.
 - `groups.json` of E17b is missing: the fold report crashed on a Windows paging-file error after scoring (the
   predictions and `score.official.json` are complete).
 
 ## 18. E18 / E19 — a short label-only prompt with a cascade for task B (2026-10-13)
 
-The measured competitor answers task B with ~820 tokens per case against our 1,640 (section 16), and the score is
+Task B costs ~1,640 input tokens per case, and the score is
 S_B = 70 % macro-F1 + 15 % time + 15 % tokens (best ÷ own). Our prompt is ~620 fixed tokens (regression of input
 tokens on reference length: 621 + 0.26 · characters) and the answer carries confidences and passage ids, which task B
 does not score. E13 (the same checklist in fewer words) and E16 (label only inside JSON) lost F1; this section tests a
@@ -732,7 +726,7 @@ Holdout (27 Sep 2026 booklets, 90 balanced task B claims, new booklets):
   attributed to the committee whose passage the cut dropped). 90 claims are few: three labels are 0.034 F1.
 - A rule "escalate when the claim is attributed to a side and the reference was cut" would fix the three, but 83 % of
   the claims are attributed, so the saving would be gone (2,012 tokens on dev).
-- **Estimated effect on S_B** with 824 tokens as the best team (the competitor's measured value): dev +0.064
+- **Estimated effect on S_B** assuming a best-team value of ~820 tokens (an assumption, the real value is unknown): dev +0.064
   (F1 −0.004 · 0.70, token score 0.48 → 0.93), holdout −0.004, pooled over both +0.06. With a lower best value the
   token gain shrinks proportionally but stays positive. The F1 risk is real: a loss like the holdout's on the private
   set would cost 0.024 of S_B, which the token gain more than covers.

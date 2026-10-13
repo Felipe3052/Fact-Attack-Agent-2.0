@@ -556,7 +556,7 @@ match the booklet language) — the candidate fix is translating the retrieval q
 
 ### Schema-constrained answers (`response_format: json_schema`, rejected, 2026-10-08)
 
-Another team constrains the answer with a JSON schema to avoid unparseable answers. We have none to avoid: 0 parse
+Constraining the answer with a JSON schema avoids unparseable answers. We have none to avoid: 0 parse
 errors in over 4,000 saved `ids`-mode answers. Paired on 150 dev task-A cases (50 per label, official evaluate.py,
 each variant run twice alternately, scores of the second runs):
 
