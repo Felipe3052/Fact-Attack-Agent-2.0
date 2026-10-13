@@ -709,10 +709,15 @@ class ClaimVerificationEngine:
 
         if self.prompt_mode in ("compact", "ids"):
             texts, usage = chunk_reference(reference), (0, 0)
+            all_chunks = texts
             budget = self._reference_budget(len(reference))
             if config.REFERENCE_MAX_CHARS and len(reference) > budget:
                 texts, usage = self._focus_reference(texts, claim, claim_language, budget)
             chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in texts]
+            cheap = None
+            if config.B_PROMPT and config.B_ESCALATE_BELOW > 0 and config.B_SHORT_CHARS                     and len(reference) > config.B_SHORT_CHARS:
+                short_texts, _ = self._focus_reference(all_chunks, claim, claim_language, config.B_SHORT_CHARS)
+                cheap = [{"text": c, "page_number": None, "proposal_id": None} for c in short_texts]
             result = self._compact_predict(
                 passages=chunks,
                 claim=claim,
@@ -722,6 +727,7 @@ class ClaimVerificationEngine:
                 strategy="direct_reference",
                 booklet_path="supplied_reference",
                 numerical_conflict_msg=numerical_conflict_msg,
+                cheap_passages=cheap,
             )
             result.tokens_prompt += usage[0]
             result.tokens_completion += usage[1]
@@ -800,6 +806,7 @@ class ClaimVerificationEngine:
         booklet_path: str,
         numerical_conflict_msg: Optional[str],
         task_a: bool = False,
+        cheap_passages: Optional[List[Dict[str, Any]]] = None,
     ) -> PredictionResult:
         """Compact mode: numbered passages in, '<label>|<passage ids>' out; evidence is verbatim passage text."""
         def label(p: Dict[str, Any]) -> str:
@@ -832,7 +839,23 @@ class ClaimVerificationEngine:
             with _PROMPT_INPUT_JOURNAL_LOCK:
                 with open(config.PROMPT_INPUT_JOURNAL_PATH, "a", encoding="utf-8") as journal:
                     journal.write(json.dumps(event, ensure_ascii=False) + "\n")
-        if self.prompt_mode == "ids":
+        if not task_a and config.B_PROMPT:
+            first_texts = [label(p) for p in cheap_passages] if cheap_passages else texts
+            out = self.client.infer_label(first_texts, model_claim, claim_language=claim_language,
+                                          prompt=config.B_PROMPT)
+            if config.B_PROBS_JOURNAL_PATH:
+                with _PROMPT_INPUT_JOURNAL_LOCK, open(config.B_PROBS_JOURNAL_PATH, "a", encoding="utf-8") as journal:
+                    journal.write(json.dumps({"id": case_id, "label": out.label, "p": [out.p_entail, out.p_neutral,
+                                                                                      out.p_contra]}) + "\n")
+            if config.B_ESCALATE_BELOW > 0 and (
+                    out.error or max(out.p_entail, out.p_neutral, out.p_contra) < config.B_ESCALATE_BELOW):
+                first = out
+                out = self.client.infer(context="", claim=model_claim, claim_language=claim_language, passages=texts)
+                out.tokens_prompt += first.tokens_prompt
+                out.tokens_completion += first.tokens_completion
+                out.tokens_total += first.tokens_total
+                out.latency_ms += first.latency_ms
+        elif self.prompt_mode == "ids":
             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
                 call["task_a"] = True

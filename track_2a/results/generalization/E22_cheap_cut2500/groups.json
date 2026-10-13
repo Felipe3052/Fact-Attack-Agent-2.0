@@ -1,0 +1,464 @@
+{
+  "tasks": {
+    "B": {
+      "cases": 1488,
+      "macro_f1": 0.9529671411164355,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9877049180327869,
+          "recall": 0.9737373737373738,
+          "f1": 0.9806714140386572,
+          "support": 495
+        },
+        "neutral": {
+          "precision": 0.9235181644359465,
+          "recall": 0.9698795180722891,
+          "f1": 0.9461312438785504,
+          "support": 498
+        },
+        "contradiction": {
+          "precision": 0.949685534591195,
+          "recall": 0.9151515151515152,
+          "f1": 0.9320987654320988,
+          "support": 495
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0,
+      "passes_acceptance_threshold": true,
+      "cross_language_macro_f1": 0.9470355585126043,
+      "fold_f1_mean": 0.9516282757081874,
+      "fold_f1_std": 0.019378744837431187,
+      "nonempty_fold_count": 5,
+      "input_tokens_reported": 1217016,
+      "output_tokens_reported": 21664,
+      "input_tokens_per_case_reported": {
+        "count": 1488,
+        "mean": 817.8870967741935,
+        "median": 843.0,
+        "p95": 981
+      },
+      "output_tokens_per_case_reported": {
+        "count": 1488,
+        "mean": 14.559139784946236,
+        "median": 2.0,
+        "p95": 50
+      }
+    }
+  },
+  "by_language": {
+    "B:fr->de": {
+      "cases": 184,
+      "macro_f1": 0.9672417095870607,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9838709677419355,
+          "recall": 0.9682539682539683,
+          "f1": 0.976,
+          "support": 63
+        },
+        "neutral": {
+          "precision": 0.9375,
+          "recall": 1.0,
+          "f1": 0.967741935483871,
+          "support": 60
+        },
+        "contradiction": {
+          "precision": 0.9827586206896551,
+          "recall": 0.9344262295081968,
+          "f1": 0.957983193277311,
+          "support": 61
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:de->de": {
+      "cases": 159,
+      "macro_f1": 0.9343189343189343,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.9821428571428571,
+          "f1": 0.990990990990991,
+          "support": 56
+        },
+        "neutral": {
+          "precision": 0.9473684210526315,
+          "recall": 0.9,
+          "f1": 0.9230769230769231,
+          "support": 60
+        },
+        "contradiction": {
+          "precision": 0.851063829787234,
+          "recall": 0.9302325581395349,
+          "f1": 0.8888888888888888,
+          "support": 43
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:it->de": {
+      "cases": 152,
+      "macro_f1": 0.9490251683800072,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.9782608695652174,
+          "f1": 0.989010989010989,
+          "support": 46
+        },
+        "neutral": {
+          "precision": 0.9148936170212766,
+          "recall": 0.9347826086956522,
+          "f1": 0.9247311827956989,
+          "support": 46
+        },
+        "contradiction": {
+          "precision": 0.9333333333333333,
+          "recall": 0.9333333333333333,
+          "f1": 0.9333333333333333,
+          "support": 60
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:it->fr": {
+      "cases": 152,
+      "macro_f1": 0.9871313912761063,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.9787234042553191,
+          "f1": 0.989247311827957,
+          "support": 47
+        },
+        "neutral": {
+          "precision": 0.9655172413793104,
+          "recall": 1.0,
+          "f1": 0.9824561403508771,
+          "support": 56
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 0.9795918367346939,
+          "f1": 0.9896907216494846,
+          "support": 49
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:fr->fr": {
+      "cases": 196,
+      "macro_f1": 0.9738250287766776,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9855072463768116,
+          "recall": 0.9714285714285714,
+          "f1": 0.9784172661870504,
+          "support": 70
+        },
+        "neutral": {
+          "precision": 0.9705882352941176,
+          "recall": 1.0,
+          "f1": 0.9850746268656716,
+          "support": 66
+        },
+        "contradiction": {
+          "precision": 0.9661016949152542,
+          "recall": 0.95,
+          "f1": 0.957983193277311,
+          "support": 60
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:de->fr": {
+      "cases": 149,
+      "macro_f1": 0.8861056173644575,
+      "per_class": {
+        "entailment": {
+          "precision": 0.98,
+          "recall": 1.0,
+          "f1": 0.98989898989899,
+          "support": 49
+        },
+        "neutral": {
+          "precision": 0.7592592592592593,
+          "recall": 0.9318181818181818,
+          "f1": 0.8367346938775511,
+          "support": 44
+        },
+        "contradiction": {
+          "precision": 0.9333333333333333,
+          "recall": 0.75,
+          "f1": 0.8316831683168316,
+          "support": 56
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:de->it": {
+      "cases": 147,
+      "macro_f1": 0.9161135161135161,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9433962264150944,
+          "recall": 0.9615384615384616,
+          "f1": 0.9523809523809523,
+          "support": 52
+        },
+        "neutral": {
+          "precision": 0.8679245283018868,
+          "recall": 1.0,
+          "f1": 0.9292929292929293,
+          "support": 46
+        },
+        "contradiction": {
+          "precision": 0.9512195121951219,
+          "recall": 0.7959183673469388,
+          "f1": 0.8666666666666667,
+          "support": 49
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:fr->it": {
+      "cases": 189,
+      "macro_f1": 0.9629659938170576,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.95,
+          "f1": 0.9743589743589743,
+          "support": 60
+        },
+        "neutral": {
+          "precision": 0.9344262295081968,
+          "recall": 0.9661016949152542,
+          "f1": 0.95,
+          "support": 59
+        },
+        "contradiction": {
+          "precision": 0.9577464788732394,
+          "recall": 0.9714285714285714,
+          "f1": 0.9645390070921985,
+          "support": 70
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:it->it": {
+      "cases": 160,
+      "macro_f1": 0.9807729573815168,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.9807692307692307,
+          "f1": 0.9902912621359223,
+          "support": 52
+        },
+        "neutral": {
+          "precision": 0.9836065573770492,
+          "recall": 0.9836065573770492,
+          "f1": 0.9836065573770492,
+          "support": 61
+        },
+        "contradiction": {
+          "precision": 0.9583333333333334,
+          "recall": 0.9787234042553191,
+          "f1": 0.968421052631579,
+          "support": 47
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    }
+  },
+  "folds": {
+    "B:0": {
+      "cases": 208,
+      "macro_f1": 0.9661491083314417,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9868421052631579,
+          "recall": 0.9615384615384616,
+          "f1": 0.974025974025974,
+          "support": 78
+        },
+        "neutral": {
+          "precision": 0.9333333333333333,
+          "recall": 1.0,
+          "f1": 0.9655172413793104,
+          "support": 56
+        },
+        "contradiction": {
+          "precision": 0.9722222222222222,
+          "recall": 0.9459459459459459,
+          "f1": 0.958904109589041,
+          "support": 74
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:1": {
+      "cases": 279,
+      "macro_f1": 0.9301770205191445,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9642857142857143,
+          "recall": 0.9642857142857143,
+          "f1": 0.9642857142857143,
+          "support": 84
+        },
+        "neutral": {
+          "precision": 0.8936170212765957,
+          "recall": 0.9438202247191011,
+          "f1": 0.9180327868852459,
+          "support": 89
+        },
+        "contradiction": {
+          "precision": 0.9306930693069307,
+          "recall": 0.8867924528301887,
+          "f1": 0.9082125603864735,
+          "support": 106
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:2": {
+      "cases": 415,
+      "macro_f1": 0.980599647266314,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9925925925925926,
+          "recall": 0.9925925925925926,
+          "f1": 0.9925925925925926,
+          "support": 135
+        },
+        "neutral": {
+          "precision": 0.9565217391304348,
+          "recall": 1.0,
+          "f1": 0.9777777777777777,
+          "support": 154
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 0.9444444444444444,
+          "f1": 0.9714285714285714,
+          "support": 126
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:3": {
+      "cases": 275,
+      "macro_f1": 0.9484953148225577,
+      "per_class": {
+        "entailment": {
+          "precision": 1.0,
+          "recall": 0.9479166666666666,
+          "f1": 0.9732620320855615,
+          "support": 96
+        },
+        "neutral": {
+          "precision": 0.9183673469387755,
+          "recall": 0.9782608695652174,
+          "f1": 0.9473684210526315,
+          "support": 92
+        },
+        "contradiction": {
+          "precision": 0.9302325581395349,
+          "recall": 0.9195402298850575,
+          "f1": 0.9248554913294798,
+          "support": 87
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "B:4": {
+      "cases": 311,
+      "macro_f1": 0.9327202876014794,
+      "per_class": {
+        "entailment": {
+          "precision": 0.9901960784313726,
+          "recall": 0.9901960784313726,
+          "f1": 0.9901960784313726,
+          "support": 102
+        },
+        "neutral": {
+          "precision": 0.9,
+          "recall": 0.9252336448598131,
+          "f1": 0.9124423963133641,
+          "support": 107
+        },
+        "contradiction": {
+          "precision": 0.9090909090909091,
+          "recall": 0.8823529411764706,
+          "f1": 0.8955223880597015,
+          "support": 102
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    }
+  },
+  "missing_required_evidence": 0,
+  "qualifies": true
+}

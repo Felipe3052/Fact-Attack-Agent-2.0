@@ -39,7 +39,7 @@ class TestReferenceFocus(unittest.TestCase):
     def run_premise(self, max_chars, claim=CLAIM, translation=None):
         client = RecordingClient(translation)
         engine = ClaimVerificationEngine(apertus_client=client)
-        with tempfile.TemporaryDirectory() as directory, patch.object(config, "REFERENCE_MAX_CHARS", max_chars), patch.object(config, "REFERENCE_MID_CHARS", 0), \
+        with tempfile.TemporaryDirectory() as directory, patch.object(config, "REFERENCE_MAX_CHARS", max_chars), patch.object(config, "REFERENCE_MID_CHARS", 0), patch.object(config, "B_PROMPT", ""), \
                 patch.object(config, "QUERY_TRANSLATION_CACHE_DIR", Path(directory)), \
                 patch.object(config, "RETRIEVAL_QUERY_MODE", "union"):
             result = engine.verify_premise(claim=claim, reference=REFERENCE, case_id="b-1")

@@ -1,0 +1,227 @@
+diff --git a/track_2a/.env.example b/track_2a/.env.example
+index bc6e7b0..720b0a3 100644
+--- a/track_2a/.env.example
++++ b/track_2a/.env.example
+@@ -50,6 +50,9 @@ LEGAL_TEXT_MAX_PAGES=0     # E1: at most n legal-text pages in the task A contex
+ REFERENCE_MAX_CHARS=6000   # E2 (adopted): task B, longer references cut to their best-matching chunks (0 = whole reference)
+ REFERENCE_MID_CHARS=3000    # E17a (adopted): task B budget for references up to REFERENCE_LONG_CHARS (0 = off)
+ REFERENCE_LONG_CHARS=9000
++B_PROMPT=topic            # E19c (adopted): task B asks a short label-only prompt first (empty = the full prompt only)
++B_ESCALATE_BELOW=0.98     # second call with the full prompt when the first answer is less sure than this (0 = never)
++B_SHORT_CHARS=2000        # reference characters the first call sees (0 = the same passages as the second call)
+ A_COMPACT_PROMPT=true      # E7 (adopted, E8): compact task A label rules, task A prompt only (+~97 input tokens/case);
+                            # false = previous baseline (docs/independent_experiments.md, sections 7-8)
+ 
+diff --git a/track_2a/src/apertus_client.py b/track_2a/src/apertus_client.py
+index 50f6e1a..3cf9599 100644
+--- a/track_2a/src/apertus_client.py
++++ b/track_2a/src/apertus_client.py
+@@ -128,6 +128,123 @@ class ApertusClient:
+         "e.g. '0|P2' or '2|P3,P7'. For neutral answer '1|'. No other text."
+     )
+ 
++    # Task B prompts (E18): label only, no ids, no confidences. The rule order is the point: without a stated order
++    # Apertus labels unrelated passages as contradiction (E13, E16). Written for this project.
++    B_PROMPTS = {
++        "topic": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do: 0 if they support the claim; 2 only if they state something that cannot be true "
++            "together with the claim (a different number or date, the opposite recommendation); otherwise 1.\n"
++            "Missing information is never a contradiction. 'According to the summary / the committee / the Federal "
++            "Council, X' is 1 when that text does not say X.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
++        ),
++        "topic2": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
++            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
++            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
++            "nothing about that particular point.\n"
++            "'According to the summary / the committee / the Federal Council, X' is 1 when that text does not say X.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
++        ),
++        "topic3": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
++            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
++            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
++            "nothing about that particular point.\n"
++            "Do not choose 1 just because the claim is a negation or a restriction (no, not, only, never, any, "
++            "all): check whether the passages say the opposite. A claim that merely adds a detail the passages do "
++            "not mention is 1.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
++        ),
++        "topic4": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
++            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
++            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
++            "nothing about that particular point.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction.\n"
++            "Answer in one line: what the passages say about the claim in at most 12 words, then => and the label digit."
++        ),
++    }
++
++    B_REASON_PROMPTS = {"topic4"}
++
++    def infer_label(
++        self,
++        passages: List[str],
++        claim: str,
++        claim_language: Optional[str] = None,
++        prompt: str = "topic",
++    ) -> NLIOutput:
++        """Task B, label only: the short prompt B_PROMPTS[prompt], unnumbered passages, the label digit as the answer."""
++        start_time = time.time()
++        system_prompt = self.B_PROMPTS[prompt]
++        reference = "\n\n".join(passages)
++        lang = f" ({claim_language})" if claim_language else ""
++        user_prompt = f"REFERENCE:\n{reference}\n\nCLAIM{lang}: {claim}\nLabel:"
++        if self.mock:
++            return self._mock_infer(reference, claim, 15.0)
++        response, err = self._create_with_retry(
++            model=self.model_name,
++            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
++            temperature=0.0,
++            max_tokens=48 if prompt in self.B_REASON_PROMPTS else 8,
++            timeout=45.0,
++            **({} if prompt in self.B_REASON_PROMPTS else {"logprobs": True, "top_logprobs": 5}),
++        )
++        if response is None and prompt not in self.B_REASON_PROMPTS:
++            # an endpoint that refuses logprobs: the same request without them (the cascade then asks again)
++            response, err = self._create_with_retry(
++                model=self.model_name,
++                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
++                temperature=0.0, max_tokens=8, timeout=45.0)
++        latency_ms = round((time.time() - start_time) * 1000, 2)
++        if response is None:
++            return NLIOutput(label=1, reasoning=f"API Error: {err}", error=f"api: {err}", latency_ms=latency_ms)
++        content = (response.choices[0].message.content or "").strip()
++        probs = self._label_probs(response.choices[0])
++        m = re.search(r"[012]", content)
++        if prompt in self.B_REASON_PROMPTS:
++            m = re.search(r"=>\s*([012])", content) or re.search(r"([012])\W*$", content)
++            probs = {}
++            if m and m.lastindex:
++                m = re.match(r"([012])", m.group(1))
++        if config.B_BIAS and len(config.B_BIAS) == 3 and len(probs) == 3 and all(v > 0 for v in probs.values()):
++            label = max(probs, key=lambda k: math.log(probs[k]) + config.B_BIAS[k])
++            m = re.match(r"(.)", str(label))
++        if not m:
++            return NLIOutput(label=1, reasoning=f"Unparseable answer: {content!r}", error=f"parse: {content!r}",
++                             latency_ms=latency_ms)
++        usage = getattr(response, "usage", None)
++        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens(system_prompt + user_prompt)
++        tc = getattr(usage, "completion_tokens", None) or self._estimate_tokens(content)
++        return NLIOutput(label=int(m.group(0)), reasoning=f"Apertus answer: {content}", tokens_prompt=tp,
++                         tokens_completion=tc, tokens_total=tp + tc, latency_ms=latency_ms,
++                         p_entail=probs.get(0, 0.0), p_neutral=probs.get(1, 0.0), p_contra=probs.get(2, 0.0))
++
+     def infer_compact(
+         self,
+         passages: List[str],
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index f033194..ae7c09a 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -77,6 +77,19 @@ PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
+ QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")
+ # Experiment (task B): ask for the label only, without confidences and passage ids (task B evidence is not scored)
+ B_LABEL_ONLY = os.getenv("B_LABEL_ONLY", "false").lower() in ("true", "1", "yes")
++# Task B (experiment E18): name of a short label-only prompt in ApertusClient.B_PROMPTS ("" = the full prompt of 'ids'
++# mode). The answer is the label digit alone and the passages are sent unnumbered, because task B's evidence is not scored.
++B_PROMPT = os.getenv("B_PROMPT", "topic").strip()
++# Task B label-only prompt: log-space bias added to the label probabilities (labels 0,1,2) before the argmax, e.g.
++# "0,0.5,0"; empty = the model's own label. B_PROBS_JOURNAL_PATH: one JSON line per case with the probabilities.
++B_BIAS = [float(v) for v in os.getenv("B_BIAS", "").split(",") if v.strip()]
++B_PROBS_JOURNAL_PATH = os.getenv("B_PROBS_JOURNAL_PATH", "").strip()
++# Task B cascade (E19): when the label-only answer's top probability is below this value (or unreadable), the case is
++# asked again with the full prompt of 'ids' mode and that answer counts (0 = no second call). Both calls' tokens count.
++B_ESCALATE_BELOW = float(os.getenv("B_ESCALATE_BELOW", "0.98"))
++# Task B cascade: characters of the reference the first (label-only) call sees; the second call keeps the full budget
++# (0 = the same passages in both calls). A cut reference makes the first answer less sure, so more cases escalate.
++B_SHORT_CHARS = int(os.getenv("B_SHORT_CHARS", "2000"))
+ # Experiment (both tasks, 'ids' mode): the system prompt's rules in fewer words (ApertusClient.LEAN_SYSTEM_PROMPT)
+ PROMPT_LEAN = os.getenv("PROMPT_LEAN", "false").lower() in ("true", "1", "yes")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index c49543e..0b09041 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -709,10 +709,15 @@ class ClaimVerificationEngine:
+ 
+         if self.prompt_mode in ("compact", "ids"):
+             texts, usage = chunk_reference(reference), (0, 0)
++            all_chunks = texts
+             budget = self._reference_budget(len(reference))
+             if config.REFERENCE_MAX_CHARS and len(reference) > budget:
+                 texts, usage = self._focus_reference(texts, claim, claim_language, budget)
+             chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in texts]
++            cheap = None
++            if config.B_PROMPT and config.B_ESCALATE_BELOW > 0 and config.B_SHORT_CHARS                     and len(reference) > config.B_SHORT_CHARS:
++                short_texts, _ = self._focus_reference(all_chunks, claim, claim_language, config.B_SHORT_CHARS)
++                cheap = [{"text": c, "page_number": None, "proposal_id": None} for c in short_texts]
+             result = self._compact_predict(
+                 passages=chunks,
+                 claim=claim,
+@@ -722,6 +727,7 @@ class ClaimVerificationEngine:
+                 strategy="direct_reference",
+                 booklet_path="supplied_reference",
+                 numerical_conflict_msg=numerical_conflict_msg,
++                cheap_passages=cheap,
+             )
+             result.tokens_prompt += usage[0]
+             result.tokens_completion += usage[1]
+@@ -800,6 +806,7 @@ class ClaimVerificationEngine:
+         booklet_path: str,
+         numerical_conflict_msg: Optional[str],
+         task_a: bool = False,
++        cheap_passages: Optional[List[Dict[str, Any]]] = None,
+     ) -> PredictionResult:
+         """Compact mode: numbered passages in, '<label>|<passage ids>' out; evidence is verbatim passage text."""
+         def label(p: Dict[str, Any]) -> str:
+@@ -832,7 +839,23 @@ class ClaimVerificationEngine:
+             with _PROMPT_INPUT_JOURNAL_LOCK:
+                 with open(config.PROMPT_INPUT_JOURNAL_PATH, "a", encoding="utf-8") as journal:
+                     journal.write(json.dumps(event, ensure_ascii=False) + "\n")
+-        if self.prompt_mode == "ids":
++        if not task_a and config.B_PROMPT:
++            first_texts = [label(p) for p in cheap_passages] if cheap_passages else texts
++            out = self.client.infer_label(first_texts, model_claim, claim_language=claim_language,
++                                          prompt=config.B_PROMPT)
++            if config.B_PROBS_JOURNAL_PATH:
++                with _PROMPT_INPUT_JOURNAL_LOCK, open(config.B_PROBS_JOURNAL_PATH, "a", encoding="utf-8") as journal:
++                    journal.write(json.dumps({"id": case_id, "label": out.label, "p": [out.p_entail, out.p_neutral,
++                                                                                      out.p_contra]}) + "\n")
++            if config.B_ESCALATE_BELOW > 0 and (
++                    out.error or max(out.p_entail, out.p_neutral, out.p_contra) < config.B_ESCALATE_BELOW):
++                first = out
++                out = self.client.infer(context="", claim=model_claim, claim_language=claim_language, passages=texts)
++                out.tokens_prompt += first.tokens_prompt
++                out.tokens_completion += first.tokens_completion
++                out.tokens_total += first.tokens_total
++                out.latency_ms += first.latency_ms
++        elif self.prompt_mode == "ids":
+             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
+             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
+                 call["task_a"] = True

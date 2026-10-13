@@ -1,0 +1,4 @@
+Apertus API attempt 1 failed: APIError; retry in 1.3s
+Apertus API attempt 1 failed: APIError; retry in 1.8s
+[timing] 90 cases, wall 59.3 s, non-LLM 25.2 ms/case
+Successfully processed 90 case(s) -> C:\GitHub\Apertus-Team-Fact-Attack-2026\track_2a\results\generalization\HO_E21b_t999_s2500\predictions.jsonl

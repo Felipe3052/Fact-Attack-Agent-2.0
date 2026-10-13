@@ -683,3 +683,91 @@ the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488
   so the token gap to the measured competitor stays (section 16).
 - `groups.json` of E17b is missing: the fold report crashed on a Windows paging-file error after scoring (the
   predictions and `score.official.json` are complete).
+
+## 18. E18 / E19 — a short label-only prompt with a cascade for task B (2026-10-13)
+
+The measured competitor answers task B with ~820 tokens per case against our 1,640 (section 16), and the score is
+S_B = 70 % macro-F1 + 15 % time + 15 % tokens (best ÷ own). Our prompt is ~620 fixed tokens (regression of input
+tokens on reference length: 621 + 0.26 · characters) and the answer carries confidences and passage ids, which task B
+does not score. E13 (the same checklist in fewer words) and E16 (label only inside JSON) lost F1; this section tests a
+different prompt structure (`B_PROMPTS` in `src/apertus_client.py`: decide in order, subject first, then relation;
+about 190 tokens; the answer is the digit alone, passages unnumbered).
+
+**E18 — the short prompt alone** (all 1,488 task B cases, E17a as the reference):
+
+| Prompt | Macro-F1 | Wrong | Tokens in + out | Main error |
+|---|---:|---:|---:|---|
+| E17a (full prompt, 3,000/6,000 chars) | 0.9872 | 19 | 1,708 | – |
+| `topic`: order subject → relation | 0.9629 | 55 | 1,186 | contradiction → neutral (36) |
+| `topic2`: relation rule widened | 0.9538 | 68 | 1,207 | entailment ↔ contradiction |
+| `topic3`: + "do not choose 1 for a negation" | 0.9658 | 51 | 1,232 | neutral / entailment → contradiction |
+| `topic4`: 12-word reason, then the digit | 0.9477 | 78 | 1,114 | neutral → contradiction (59) |
+
+The short prompts lose 0.02–0.04 F1 whichever way the rule is worded, so the F1 of E17a is not reachable with a
+single short call. Biasing the label probabilities (grid on the log-probability of the digit) recovers at most
++0.008 in-sample. **But 84 % of the short answers are saturated (top probability ≥ 0.999) and 53 of the 57 errors of
+`topic` sit in the unsaturated rest** (offline, from the journal of the label probabilities).
+
+**E19 — cascade:** the short call first; when its top probability is below `B_ESCALATE_BELOW` (or unreadable), the
+same case is asked again with the full prompt of E17a and that answer counts. Both calls' tokens are counted. The first
+call may see fewer reference characters (`B_SHORT_CHARS`), because a less sure answer escalates anyway.
+
+| Task B, 1,488 cases | E17a | E19a: < 0.98, same passages | E19c: < 0.98, first call ≤ 2,000 chars | E19d: first call ≤ 2,500 |
+|---|---:|---:|---:|---:|
+| Macro-F1 | 0.9872 | 0.9858 | **0.9832** | 0.9818 |
+| Wrong labels | 19 | 21 | 25 | 27 |
+| Tokens in + out per case | 1,708 | 1,386 | **888** (−48 %) | 1,024 |
+| Escalated | – | 12.7 % | 9.8 % | – |
+| Extra wrong labels per fold (5 folds) | – | 0 1 1 0 0 | 1 1 2 1 1 | 0 6 0 0 2 |
+
+Holdout (27 Sep 2026 booklets, 90 balanced task B claims, new booklets):
+
+| | E17a | E19a | E19c | E19d |
+|---|---:|---:|---:|---:|
+| Macro-F1 / wrong labels | 0.966 / 3 | 0.955 / 4 | 0.933 / 6 | 0.944 / 5 |
+| Tokens in + out | 1,810 | 1,963 | 1,413 | 1,609 |
+
+- On the unseen booklets the first call is less sure, so the cascade without a cut (E19a) escalates more and saves
+  nothing there; with the 2,000-character cut (E19c) it saves 22 % at three more wrong labels (two of them claims
+  attributed to the committee whose passage the cut dropped). 90 claims are few: three labels are 0.034 F1.
+- A rule "escalate when the claim is attributed to a side and the reference was cut" would fix the three, but 83 % of
+  the claims are attributed, so the saving would be gone (2,012 tokens on dev).
+- **Estimated effect on S_B** with 824 tokens as the best team (the competitor's measured value): dev +0.064
+  (F1 −0.004 · 0.70, token score 0.48 → 0.93), holdout −0.004, pooled over both +0.06. With a lower best value the
+  token gain shrinks proportionally but stays positive. The F1 risk is real: a loss like the holdout's on the private
+  set would cost 0.024 of S_B, which the token gain more than covers.
+- **Run to run:** the adopted defaults without any `--set` (`E20_default_cascade`, `HO_E20_default_cascade`) give
+  macro-F1 0.9818 / 27 wrong at 886 tokens on the dataset and 4 wrong at 1,429 tokens on the holdout; E19c was
+  0.9832 / 25 and 6. The same configuration differs by about two labels between runs.
+- **Stricter threshold (E21, `B_ESCALATE_BELOW=0.999`):**
+
+| | E17a | E19c (0.98, 2,000) | E21a (0.999, 2,000) | E21b (0.999, 2,500) |
+|---|---:|---:|---:|---:|
+| Dataset: macro-F1 / wrong | 0.9872 / 19 | 0.9832 / 25 | 0.9858 / 21 | **0.9872 / 19** (0 fixed, 0 broken) |
+| Dataset: tokens | 1,708 | 888 | 1,126 | 1,270 (−26 %) |
+| Holdout: wrong of 90 | 3 | 6 (4 in the default run) | 4 | 4 |
+| Holdout: tokens | 1,810 | 1,413 | 1,901 (+5 %) | 2,139 (+18 %) |
+
+  On the dataset E21b is the one configuration that keeps the labels of E17a exactly and still saves tokens. On the
+  unseen booklets of the holdout the first call is less sure, so the stricter threshold escalates far more cases and
+  the cascade costs more than E17a there. The cascade is therefore a trade of tokens against a small F1 risk, not a
+  free gain: no configuration here is better on both sets. The token and time scores are relative to the other
+  teams and cannot be computed locally (the starter scorer says so), so the effect on S_B is only estimated.
+- **Escalation rules compared offline (E22):** the first call alone was run with the cut on all 1,488 cases
+  (`E22_cheap_cut1500/2000/2500`, with the label probabilities), and the escalated cases take the label and tokens of
+  E17a (a simulation, not a run). Searching a threshold per predicted label for the lowest tokens at the F1 of E17a:
+
+| First call sees | Cheap only: F1 / tokens | Uniform threshold at F1 of E17a | Per-label threshold (0 / 1 / 2) at F1 of E17a |
+|---|---:|---:|---:|
+| 1,500 chars | 0.9537 / 624 | 0.9999 → 1,380 tokens | 0.999 / 0.999 / 0.9999 → **1,110 tokens (−35 %)** |
+| 2,000 chars | 0.9650 / 732 | none (always escalates) | 0.95 / 0.999 / never → 1,386 tokens |
+| 2,500 chars | 0.9530 / 832 | 0.999 → 1,274 tokens | 0.5 / 0.999 / 0.99 → 1,175 tokens |
+
+  Chosen on four folds and applied to the fifth, the per-label thresholds of the 1,500 case held the F1 of E17a in
+  four folds (−520 to −730 tokens per case); in the fifth the search selected different thresholds and lost 0.018. So
+  the saving at the F1 of E17a is about 20–35 %, and a threshold tuned on this data is not a guarantee for new
+  booklets. These per-label thresholds are not in the code (`B_ESCALATE_BELOW` is one number).
+- **Decision: E19c adopted** (`B_PROMPT=topic`, `B_ESCALATE_BELOW=0.98`, `B_SHORT_CHARS=2000`, defaults in
+  `src/config.py` and both `.env.example` files). An endpoint without logprobs makes every case escalate (the full
+  prompt again, so the labels stay those of E17a at ~2.1× the tokens); a refused `logprobs` parameter is retried
+  without it. `B_PROMPT=""` restores E17a exactly.
