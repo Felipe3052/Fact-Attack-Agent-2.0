@@ -140,7 +140,7 @@ when its label probability is below 0.98 (~10 % of the cases) the case is asked 
 both calls' tokens count. Most of the short call's errors lie in that unsure part. All pairs: macro-F1 0.982,
 865 input and 21 output tokens (−48 %). On the holdout (two votes, ~30 distinct claims) it saves 22 % at 4 instead of
 3 wrong labels. The token score cannot be computed locally, so the net effect is estimated (about +0.06 on the
-beginner score if the best team uses ~820 tokens). `B_PROMPT=` restores (1); `B_ESCALATE_BELOW=0.999` with
+beginner score under an assumed best-team value of ~820 tokens). `B_PROMPT=` restores (1); `B_ESCALATE_BELOW=0.999` with
 `B_SHORT_CHARS=2500` keeps the labels of (1) at −26 % tokens.
 
 ### 2.5 CLI and output format
@@ -219,12 +219,13 @@ with an Apertus request in flight.
 
 | Evaluation set | Task | Macro-F1 | Hit@5 | Input / output tokens | Apertus time (mean / p95) |
 |---|---|---:|---:|---:|---:|
-| **Holdout, unseen booklets** (90 pairs) | Advanced | **0.956** | **0.933** | 1,751 / 57 | – |
-| | Beginner | **0.955** | – | 1,390 / 40 | – |
-| **All 1,488 pairs** (5 date folds) | Advanced | **0.968** (folds 0.954–0.978) | **0.975** | 1,750 / 59 | 1.0 s / 1.2 s |
-| | Beginner | **0.982** (folds 0.969–0.991) | – | 865 / 21 | 0.25 s / 1.2 s |
+| **Holdout** (90 pairs) | Advanced | **0.956** | **0.933** | 1,751 / 57 | – |
+| **Holdout** (90 pairs) | Beginner | **0.955** | – | 1,390 / 40 | – |
+| **All pairs** (1,488) | Advanced | **0.968** | **0.975** | 1,750 / 59 | 1.0 s / 1.2 s |
+| **All pairs** (1,488) | Beginner | **0.982** | – | 865 / 21 | 0.25 s / 1.2 s |
 
-Processing time outside the model calls: ~2 ms per case (CLI estimate, cached booklets). Before part selection
+Holdout = unseen booklets; all pairs = 5 date-grouped folds, macro-F1 per fold 0.954–0.978 (advanced) and
+0.969–0.991 (beginner). Processing time outside the model calls: ~2 ms per case (CLI estimate, cached booklets). Before part selection
 (8 retrieved pages): 0.949 / Hit@5 0.881 at 3,915 tokens on all pairs, 0.933 / 0.850 on the holdout. Macro-F1 and
 Hit@5 by language pair (booklet → claim), all 1,488 pairs per task:
 

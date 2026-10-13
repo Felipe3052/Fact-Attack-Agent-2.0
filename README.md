@@ -26,15 +26,19 @@ Model: `swiss-ai/Apertus-v1.5-70B-thinking` on CSCS. Every number below comes fr
 through the official CLI (`--input/--output`) and scored with the organisers' `evaluate.py`; predictions and reports
 are saved in [`track_2a/results/generalization/`](track_2a/results/generalization/).
 
-| Evaluation set | Task | Macro-F1 | Evidence Hit@5 | Ø input / output tokens |
-| :--- | :--- | :---: | :---: | :---: |
-| **Unseen booklets**: own holdout on the 27 Sep 2026 vote, 90 claims | A · Advanced | **0.956** | **0.933** | 1,751 / 57 |
-| | B · Beginner | **0.955** | – | 1,390 / 40 |
-| **Whole dataset** (v1.1, 1,488 pairs, 20 voting dates, 5 date-grouped folds) | A · Advanced | **0.968** (folds 0.954–0.978) | **0.975** | 1,750 / 59 |
-| | B · Beginner | **0.982** (folds 0.969–0.991) | – | 865 / 21 |
+| Evaluation set | Task | Macro-F1 | Hit@5 | Input tokens | Output tokens |
+| :--- | :---: | ---: | ---: | ---: | ---: |
+| **Holdout** (unseen booklets, 90 claims) | A | **0.956** | **0.933** | 1,751 | 57 |
+| **Holdout** (unseen booklets, 90 claims) | B | **0.955** | – | 1,390 | 40 |
+| **Dataset** (1,488 pairs) | A | **0.968** | **0.975** | 1,750 | 59 |
+| **Dataset** (1,488 pairs) | B | **0.982** | – | 865 | 21 |
 
-- Task A: booklet PDF + claim + vote. Task B: reference text + claim. Mean Apertus time per case 1.0 s (A) / 0.25 s (B);
-  processing time outside the model calls stays in the millisecond range per case.
+Tokens are means per case; Hit@5 is the share of gold entailment/contradiction cases where one of the first five evidence items overlaps the gold passage (task A only).
+
+- **Tasks:** A (advanced) = booklet PDF + claim + vote; B (beginner) = reference text + claim. Mean Apertus time per
+  case 1.0 s (A) / 0.25 s (B); processing time outside the model calls stays in the millisecond range per case.
+- **Sets:** the holdout is our own, on the 27 September 2026 vote; the dataset is v1.1 with 20 voting dates in 5
+  date-grouped folds (macro-F1 per fold: A 0.954–0.978, B 0.969–0.991).
 - **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
   vote, which are not part of the dataset. Written before the system ever ran on them, labels checked by a second
   person (90/90 agree). Used only at the end: to confirm E2 and the task B changes (E17a, E19c) and to check E8 and the
