@@ -64,6 +64,14 @@ PAGE_MAX_CHARS = int(os.getenv("PAGE_MAX_CHARS", "3000"))
 # keep at most PAGE_MAX_CHARS_TAIL characters (0 = off). The best gold page is among the first 4 in 85 % of the cases.
 PAGE_MAX_CHARS_TAIL = int(os.getenv("PAGE_MAX_CHARS_TAIL", "0"))
 PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
+# E12 (adopted): contents-guided part selection (task A): the context is the booklet part the claim's opening names (summary,
+# detail, committee, Federal Council, voting text) of the case's vote, located with the booklet's contents page
+# (src/part_context.py); at most PART_CONTEXT_CHARS characters, best-matching pages first. Claims without a part use the
+# regular retrieval.
+PART_CONTEXT = os.getenv("PART_CONTEXT", "true").lower() in ("true", "1", "yes")
+PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
+# Experiment (both tasks, 'ids' mode): the system prompt's rules in fewer words (ApertusClient.LEAN_SYSTEM_PROMPT)
+PROMPT_LEAN = os.getenv("PROMPT_LEAN", "false").lower() in ("true", "1", "yes")
 
 # Prompt mode:
 #   'ids'     - JSON with confidences + cited passage ids (default: best F1, ~55 output tokens)

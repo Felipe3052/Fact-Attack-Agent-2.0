@@ -510,3 +510,60 @@ Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20]
 - **Reading:** the compact prompt is neutral on the unseen booklets (within the one-label run-to-run variation of the
   two earlier runs with identical settings) at +3 % input tokens, as on the dataset (+2.5 %). **E8 stays active.**
   The configuration is frozen for the submission.
+
+## 11. E12 — contents-guided part selection: the booklet part each claim names (2026-10-13)
+
+- **Origin of the idea:** a competing team's public repository describes choosing the booklet part a claim's opening
+  names. The implementation here is our own (`src/part_context.py`, switch `PART_CONTEXT`, first named
+  `SECTION_ROUTE`, which the E12 run folders still record); no code was taken over.
+- **Finding behind it:** D0 showed that the remaining task A errors are reading errors with the gold page in context;
+  the 8 retrieved pages also carry text of other parts and votes. The dataset's claims name their source in the
+  opening ("Laut der Zusammenfassung …", "Le comité estime …", "Se il voto viene accettato …"), and every booklet's
+  contents page lists, per vote, the pages of summary, detail, arguments and voting text.
+- **Part selection:** claim opening → part (summary, detail for consequences of a yes, committee, Federal Council, voting text;
+  the earliest cue wins); contents page → page ranges per vote (navigation bars on the summary pages ignored,
+  two-page contents merged, start pages checked against the page headings); vote matched by the words of its title,
+  also against the first lines of its summary and detail pages; the arguments split by the parser's speaker labels.
+  Context: the part's pages in reading order, at most 6,000 characters (best pages by BM25 first when the part is
+  longer, the claim translated only then). Claims without a part keep the regular retrieval.
+- **Offline (no API):** contents read in 60/60 booklets, a part found for 1,476 of 1,488 claims, the vote for all;
+  gold-word coverage of the context 0.956 vs 0.894 for the 8 retrieved pages (cases below 0.8: 19 vs 206).
+- **Predeclared bar** (against E7_compact, the submission): macro-F1 ≥ −0.005, Hit@5 ≥ 872, input tokens ≥ −40 %.
+
+| Task A, 1,488 cases | E7_compact (submission) | **E12 part selection** |
+|---|---:|---:|
+| Macro-F1 | 0.949 | **0.968** (date bootstrap 95 %: +0.005 … +0.035) |
+| Macro-F1 de-duplicated / cross-language | 0.953 / 0.949 | 0.965 / 0.971 |
+| Evidence Hit@5 (990) | 872 | **965** (110 fixed / 17 broken) |
+| Input / output tokens per case | 3,915 / 60 | **1,750 / 59** (−55 %) |
+| Labels fixed / broken | – | 56 / 29 (noise floor of an unchanged rerun: 11 / 22) |
+| Holdout (new booklets, 90; a part for all) | 0.933 / Hit@5 0.850 / 3,980 tokens | **0.956 / 0.933 / 1,751** (6 → 4 wrong) |
+
+- Folds: 4 of 5 better (fold 3 +0.059, fold 4 +0.040; fold 2 −0.007). Language pairs: 8 of 9 better, de→de −0.021.
+- **Decision: passes every criterion.** Selecting the part the claim names gives the model less distraction and the
+  evidence the gold part, at less than half the tokens — the clearest single gain of the project.
+
+## 12. E13 — the system prompt's rules in fewer words (2026-10-13, rejected)
+
+- **Hypothesis:** with the part context of E12 the fixed prompt (~700 tokens) is the largest token item; the same rules,
+  labels and JSON schema in 1,766 instead of 2,618 characters (`PROMPT_LEAN`) save ~210 tokens per case in both tasks.
+- **Runs:** task A with the part context (E12 settings) against E12, task B against E2_reference_6000 (the submission), all 1,488
+  cases each, 0 failed cases.
+
+| | Macro-F1 | Hit@5 | Labels fixed / broken | Input tokens |
+|---|---:|---:|---:|---:|
+| Task A: E12 → E13 | 0.968 → 0.952 | 0.975 → 0.986 | 16 / 40 | 1,750 → 1,533 |
+| Task B: E2 → E13 | 0.984 → ~0.94 (23 → 91 wrong) | – | 4 / 72 | 1,732 → 1,515 |
+
+- The new errors turn towards contradiction (task A 0→2: 26, 1→2: 13; task B 0→2: 45, 1→2: 25), the same failure as
+  the earlier `PROMPT_SHORT`. Apertus depends on the exact wording of the full checklist.
+- **Decision: rejected** (bar: F1 ≥ −0.005). The full prompt stays; the switch stays off.
+
+## 13. E14 — a smaller part budget (2026-10-13, rejected) and adoption of E12
+
+- **Hypothesis:** with `PART_CONTEXT_CHARS=4000` instead of 6,000 the long parts (detail, voting text) keep their best
+  pages only, for ~120 fewer input tokens per case (offline: gold-word coverage 0.910 → 0.873).
+- **Result** (all 1,488 task A cases against E12): macro-F1 0.968 → 0.948, Hit@5 0.975 → 0.940, labels 7 fixed /
+  37 broken, input tokens 1,750 → 1,636 (−6.5 %). **Rejected:** the model needs the whole part.
+- **Adopted: E12** (`PART_CONTEXT=true`, `PART_CONTEXT_CHARS=6000`) is now the default in `src/config.py` and both
+  `.env.example` files, so the submission image runs it. The full system prompt stays (E13).

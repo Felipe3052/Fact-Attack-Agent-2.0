@@ -10,10 +10,10 @@ or **contradicts (2)** a claim, and cites the booklet pages that justify the dec
 German, French and Italian.
 
 - **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
-  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.933** macro-F1,
-    Hit@5 **0.850**, 3,980 input tokens; beginner **0.966**, 1,758 input tokens
-  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.949**, Hit@5 **0.881**,
-    3,915 input tokens; beginner **0.984**, 1,732 input tokens
+  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.956** macro-F1,
+    Hit@5 **0.933**, 1,751 input tokens; beginner **0.966**, 1,758 input tokens
+  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.968**, Hit@5 **0.975**,
+    1,750 input tokens; beginner **0.984**, 1,732 input tokens
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
   **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 
@@ -50,6 +50,8 @@ RETRIEVAL_QUERY_MODE=union                  # BM25 with the claim and its transl
 EVIDENCE_POLICY=raw_pages_and_blocks        # cited PyMuPDF pages + best-matching text blocks
 REFERENCE_MAX_CHARS=6000                    # task B: longer references cut to the passages that match the claim
 A_COMPACT_PROMPT=true                       # task A: compact label rules (E7, on in the submission; false = previous baseline)
+PART_CONTEXT=true                           # task A: context = the booklet part the claim names, via the contents page (E12)
+PART_CONTEXT_CHARS=6000                     # at most this many characters of that part
 NLI_WORKERS=4                               # cases processed in parallel by the batch CLI
 ```
 
@@ -58,6 +60,11 @@ label rules to the task A prompt only (task B is never affected). Evaluated in
 E7 on 1,488 cases against a fresh baseline: macro-F1 0.9419 → 0.9493 (95 % date-bootstrap interval −0.002 … +0.018,
 so not significant), Hit@5 858 → 872 of 990, +2.5 % input tokens; see `docs/independent_experiments.md`, section 7.
 With `A_COMPACT_PROMPT=false` every request is byte-identical to the previous submission baseline.
+
+`PART_CONTEXT` (on by default, E12) replaces the 8 retrieved pages by the part of the booklet the claim's opening names,
+located with the contents page (`src/part_context.py`); claims without such an opening, or booklets without a readable
+contents page, keep the retrieval. All 1,488 task A pairs: macro-F1 0.949 → 0.968, Hit@5 0.881 → 0.975, input tokens
+−55 %; see `docs/independent_experiments.md`, sections 11–13.
 
 A value set in a local `.env` overrides these for local runs; keep only endpoint and key there.
 `python scripts/run_decision.py --data <prepared cases> --name <run>` runs exactly the submission configuration

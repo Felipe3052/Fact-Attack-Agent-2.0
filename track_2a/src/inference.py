@@ -135,6 +135,11 @@ def attributed_section(claim: str) -> Optional[str]:
 
 
 _SPEAKER_NAMES = {_COMMITTEE_SECTION: "initiative/referendum committee", _FEDERAL_COUNCIL_SECTION: "Federal Council and Parliament"}
+# PART_CONTEXT: parser speaker labels for splitting the arguments, and the label each selected part shows the model
+_PART_SPEAKERS = {_COMMITTEE_SECTION: "committee", _FEDERAL_COUNCIL_SECTION: "federal_council"}
+_PART_LABELS = {"summary": "Overview / summary", "detail": "Official explanation in detail",
+                  "committee": _COMMITTEE_SECTION, "federal_council": _FEDERAL_COUNCIL_SECTION,
+                  "legal_text": _LEGAL_TEXT_SECTION}
 
 
 def _cache_name(pdf_path: Path) -> str:
@@ -303,6 +308,69 @@ class ClaimVerificationEngine:
                 _GLOBAL_BOOKLET_CACHE[key] = {**parsed, "retriever": PassageRetriever(parsed["paragraphs"])}
         return _GLOBAL_BOOKLET_CACHE[key]
 
+    def _booklet_parts(self, booklet_data: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+        """Page ranges of the booklet's votes and parts from its contents page (PART_CONTEXT), computed once."""
+        if "section_parts" not in booklet_data:
+            from src import part_context
+            sources = booklet_data.get("source_pages") or {}
+            speaker = {p["page_number"]: _PART_SPEAKERS[p["section"]] for p in booklet_data["paragraphs"]
+                       if p.get("section") in _PART_SPEAKERS}
+            parts = None
+            # PyMuPDF keeps the contents' reading order (63/63 dataset and holdout booklets), pypdf only in 37/63
+            for texts in ({int(n): s["text"] for n, s in sources.items()},
+                          {p["page_number"]: p["text"] for p in booklet_data["pages"]}):
+                try:
+                    parts = part_context.booklet_parts(texts, speaker) if texts else None
+                except Exception as exc:  # a layout the parser does not know: regular retrieval for every claim
+                    print(f"[warning] contents page not readable ({type(exc).__name__})", file=sys.stderr)
+                if parts:
+                    break
+            booklet_data["section_parts"] = parts
+        return booklet_data["section_parts"]
+
+    def _part_passages(self, booklet_data: Dict[str, Any], claim: str, vote: Optional[str],
+                         claim_language: Optional[str], booklet_language: Optional[str]):
+        """
+        PART_CONTEXT: the pages of the part the claim names, of the case's vote, in reading order, at most
+        PART_CONTEXT_CHARS characters. A part over the budget keeps its best-matching pages (BM25 with the claim, its
+        translation for a cross-lingual claim, and the vote title); the last one is cut to the remaining budget.
+        Returns (passages, translation token usage) or None when no part is found for the claim.
+        """
+        from src import part_context
+        found = part_context.part_pages(claim, vote, self._booklet_parts(booklet_data))
+        if not found:
+            return None
+        part, pages = found
+        by_page = {}
+        for p in booklet_data["paragraphs"]:
+            by_page.setdefault(p["page_number"], p)
+        candidates = [by_page[n] for n in pages if n in by_page and by_page[n]["text"].strip()]
+        if not candidates:
+            return None
+        label = _PART_LABELS[part]
+        budget, usage = config.PART_CONTEXT_CHARS, (0, 0)
+        if sum(len(p["text"]) for p in candidates) > budget:
+            variants = None
+            if config.RETRIEVAL_QUERY_MODE != "original":
+                source_language = booklet_language or guess_language(" ".join(p["text"] for p in booklet_data["pages"][:3]))
+                language = claim_language or guess_language(claim)
+                if language != source_language:
+                    translated, usage, _ = self._translate_query(claim, language, source_language)
+                    variants = [translated] if translated else None
+            ranked = PassageRetriever(candidates).retrieve_hybrid(claim, top_k=len(candidates), target_vote=vote,
+                                                                  query_variants=variants)
+            chosen, left = {}, budget
+            for p in ranked:
+                if left < 600:
+                    break
+                text = p["text"] if len(p["text"]) <= left else clip_to_query(p["text"], f"{claim} {vote or ''}", left)
+                chosen[p["page_number"]] = text
+                left -= len(text)
+            selected = [(p, chosen[p["page_number"]]) for p in candidates if p["page_number"] in chosen]
+        else:
+            selected = [(p, p["text"]) for p in candidates]
+        return [{**p, "text": text, "page_text": p["text"], "section": label} for p, text in selected], usage
+
     def _translate_query(self, claim: str, language: str, target_language: str):
         """The claim translated into the source language for lexical retrieval only (None if rejected or failed),
         the (prompt, completion) tokens it cost, and the cache receipt."""
@@ -382,9 +450,16 @@ class ClaimVerificationEngine:
         booklet_data = self._get_booklet_data(booklet_pdf)
         retrieval_claim, query_variants = claim, None
         translation_usage, query_metadata = (0, 0), {}
+        part_ctx = None
+        if config.PART_CONTEXT and strat == "hybrid" and self.prompt_mode in ("ids", "compact"):
+            part_ctx = self._part_passages(booklet_data, claim, vote, claim_language, booklet_language)
+            if part_ctx:
+                translation_usage = part_ctx[1]
         # Query translation only applies to hybrid ids/compact retrieval with an unchanged NLI claim; other
         # strategies (now that 'union' is the default) simply retrieve with the original claim
-        if (config.RETRIEVAL_QUERY_MODE != "original" and strat == "hybrid" and not config.TRANSLATE_CLAIM
+        if part_ctx:
+            pass
+        elif (config.RETRIEVAL_QUERY_MODE != "original" and strat == "hybrid" and not config.TRANSLATE_CLAIM
                 and self.prompt_mode in ("ids", "compact")):
             source_language = booklet_language or guess_language(" ".join(p['text'] for p in booklet_data['pages'][:3]))
             language = claim_language or guess_language(claim)
@@ -401,7 +476,10 @@ class ClaimVerificationEngine:
                         query_variants = [translated]
 
         candidate_paras = []
-        if strat == "full":
+        if part_ctx:
+            candidate_paras = part_ctx[0]
+            context = "\n\n".join(f"[Page {p['page_number']}] {p['text']}" for p in candidate_paras)
+        elif strat == "full":
             # Strategy 1: Provide full booklet text to Apertus
             context = booklet_data["full_text"]
             candidate_paras = booklet_data["paragraphs"]

@@ -28,17 +28,17 @@ are saved in [`track_2a/results/generalization/`](track_2a/results/generalizatio
 
 | Evaluation set | Task | Macro-F1 | Evidence Hit@5 | Ø input / output tokens |
 | :--- | :--- | :---: | :---: | :---: |
-| **Unseen booklets**: own holdout on the 27 Sep 2026 vote, 90 claims | A · Advanced | **0.933** | **0.850** | 3,980 / 73 |
+| **Unseen booklets**: own holdout on the 27 Sep 2026 vote, 90 claims | A · Advanced | **0.956** | **0.933** | 1,751 / 57 |
 | | B · Beginner | **0.966** | – | 1,758 / 60 |
-| **Whole dataset** (v1.1, 1,488 pairs, 20 voting dates, 5 date-grouped folds) | A · Advanced | **0.949** (folds 0.919–0.980) | **0.881** | 3,915 / 60 |
+| **Whole dataset** (v1.1, 1,488 pairs, 20 voting dates, 5 date-grouped folds) | A · Advanced | **0.968** (folds 0.954–0.978) | **0.975** | 1,750 / 59 |
 | | B · Beginner | **0.984** (folds 0.968–0.990) | – | 1,732 / 62 |
 
-- Task A: booklet PDF + claim + vote. Task B: reference text + claim. Mean Apertus time per case 1.6 s (A) / 1.1 s (B);
+- Task A: booklet PDF + claim + vote. Task B: reference text + claim. Mean Apertus time per case 1.0 s (A) / 1.1 s (B);
   processing time outside the model calls stays in the millisecond range per case.
 - **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
   vote, which are not part of the dataset. Written before the system ever ran on them, labels checked by a second
-  person (90/90 agree). Used only at the end: to confirm E2 and to check the compact label rules (E8) for regressions
-  (6 wrong advanced labels before and after). Small (± ~0.05 macro-F1), but not used to design anything.
+  person (90/90 agree). Used only at the end: to confirm E2 and to check E8 and the part selection (E12) for regressions
+  (6 → 6 → 4 wrong advanced labels). Small (± ~0.05 macro-F1), but not used to design anything.
 - **Whole dataset:** all of it has been used for design decisions by now, including the earlier 5-date test split
   (where the submission before E8 scored A 0.942 / Hit@5 0.833, B 0.982); it shows how stable the results are across voting
   dates, not how they generalise. Running the same configuration twice changes 3 of 1,488 labels.
@@ -62,6 +62,12 @@ measurements on the same cases ([experiment log](track_2a/docs/experiments.md#me
   1,488 pairs (22 fixed / 11 broken) for +2.5 % tokens; neutral on the holdout. Rejected after measuring: section labels
   for navigation-bar pages (E5, noise), evidence blocks only (E6, gains only via the vote title in the gold passages),
   smaller windows for lower-ranked pages (E11, −0.006 F1).
+- **Contents-guided part selection** (E12): the claim's opening names its source (summary, committee, Federal
+  Council, voting text, consequences of a yes) and the booklet's contents page locates that part of the vote, which
+  becomes the whole context. All 1,488 pairs: macro-F1 0.949 → 0.968 (date bootstrap +0.005 … +0.035), Hit@5
+  0.881 → 0.975, input tokens 3,915 → 1,750 (−55 %); holdout 0.933 → 0.956. Claims without such an opening keep the
+  retrieval of 8 pages. Rejected after measuring: a shorter system prompt (E13, A −0.016, B ~−0.04) and a smaller part
+  budget (E14, −0.020).
 
 **Evidence:** every Entailment / Contradiction prediction returns up to five verbatim quotes with their 1-based page:
 up to three cited pages as PyMuPDF reads them, plus the two text blocks of the cited pages that best match claim and

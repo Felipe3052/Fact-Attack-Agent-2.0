@@ -228,6 +228,34 @@ class ApertusClient:
         '"evidence_ids": [<ids of the passages that justify the label, e.g. 2, 5; empty for 1>]}'
     )
 
+    # Experiment (PROMPT_LEAN, 'ids' mode, both tasks): the rules of the full prompt in fewer words, same JSON schema
+    # (with the "<0.0 - 1.0>" placeholders; written as 0-1 the confidences collapsed to 0 in the PROMPT_SHORT trial)
+    LEAN_SYSTEM_PROMPT = (
+        "You check a claim against numbered passages [P1], [P2], ... from an official Swiss voting booklet "
+        "(Abstimmungsbüchlein). Passages and claim may be in different languages (German, French, Italian): compare "
+        "meaning, not wording.\n\n"
+        "Labels:\n"
+        "- 0 Entailment: the passages directly support the claim.\n"
+        "- 1 Neutral: the passages do NOT mention what the claim is about, or give too little information.\n"
+        "- 2 Contradiction: the passages directly state the opposite of the claim.\n\n"
+        "Rules:\n"
+        "1. A number, date or percentage that differs from the passages (e.g. 500'000 vs 1.7 million, 2030 vs 2050) "
+        "is a contradiction (2).\n"
+        "2. If the claim's topic is not mentioned in the passages, you MUST choose 1 (Neutral), never 2.\n"
+        "3. A claim that attributes a statement to an actor (the committee, the Federal Council, the summary) is "
+        "judged only against that actor's text; the other side's arguments are not a contradiction.\n"
+        "4. 'Recommends rejecting X' is 0 if the Federal Council and Parliament recommend No on X or reject X, 2 only "
+        "if they recommend Yes.\n\n"
+        "Estimate your confidence in each relation and respond ONLY with a valid JSON object:\n"
+        "{\n"
+        '  "p_entail": <0.0 - 1.0>,\n'
+        '  "p_neutral": <0.0 - 1.0>,\n'
+        '  "p_contra": <0.0 - 1.0>,\n'
+        '  "label": <0, 1, or 2>,\n'
+        '  "evidence_ids": [<ids of the passages that justify the label, e.g. 2, 5; empty for 1>]\n'
+        "}"
+    )
+
     LANGUAGE_NAMES = {"de": "German", "fr": "French", "it": "Italian"}
 
     def translate(self, text: str, target_lang: str) -> Tuple[Optional[str], int, int, float]:
@@ -405,6 +433,9 @@ class ApertusClient:
                 "The context is a list of numbered passages [P1], [P2], ... and may be in a different "
                 "language (German, French, Italian) than the claim: compare meaning, not wording.\n",
             )
+
+        if passages is not None and config.PROMPT_LEAN:
+            system_prompt = self.LEAN_SYSTEM_PROMPT
 
         if task_a and passages is not None and config.A_RELATION_PROMPT:
             system_prompt += (
