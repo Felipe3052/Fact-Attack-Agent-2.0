@@ -1,0 +1,99 @@
+diff --git a/track_2a/src/apertus_client.py b/track_2a/src/apertus_client.py
+index e304cff..fe367b7 100644
+--- a/track_2a/src/apertus_client.py
++++ b/track_2a/src/apertus_client.py
+@@ -314,6 +314,7 @@ class ApertusClient:
+         claim: str,
+         claim_language: Optional[str] = None,
+         passages: Optional[List[str]] = None,
++        task_a: bool = False,
+     ) -> NLIOutput:
+         """
+         Evaluate whether the booklet context entails, contradicts, or is neutral towards the claim.
+@@ -381,6 +382,19 @@ class ApertusClient:
+                 "language (German, French, Italian) than the claim: compare meaning, not wording.\n",
+             )
+ 
++        if task_a and passages is not None and config.A_RELATION_PROMPT:
++            system_prompt += (
++                "\nRELATION CHECK (apply before choosing the label): Compare the same proposition across the claim "
++                "and the passages: who is involved, what action or state and object are asserted, and the relevant "
++                "properties, including negation, amount and unit, time, scope, conditions, and modality. Label 0 "
++                "when a passage states the same fact or a logically equivalent one. Label 2 only when the text "
++                "states an incompatible fact about that same actor, action, object, and property (for example an "
++                "explicit opposite, negation, or conflicting value). A missing detail, silence, or an unsupported "
++                "claim is not a contradiction; use 1 when the passages do not settle it. Do not turn an explicit "
++                "opposite or conflicting value into Neutral. A different speaker's position is not a contradiction "
++                "of the attributed speaker's claim.\n"
++            )
++
+         if passages is not None and config.PROMPT_SHORT:
+             # Same rules in fewer words: input tokens are scored relative to the most frugal team
+             system_prompt = self.SHORT_SYSTEM_PROMPT
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index 5b8aea8..141ee82 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -70,6 +70,12 @@ PROMPT_MODE = os.getenv("PROMPT_MODE", "ids")
+ # 'ids' mode: let the model write one short sentence before its confidences (a minimal reasoning step)
+ IDS_REASON = os.getenv("IDS_REASON", "false").lower() in ("true", "1", "yes")
+ 
++# Prompt-screening switch: add the contrastive entity/action/property checklist to Task A only.
++# Disabled by default; it changes no submission behaviour unless explicitly enabled.
++A_RELATION_PROMPT = os.getenv("A_RELATION_PROMPT", "false").lower() in ("true", "1", "yes")
++# Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
++PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
++
+ # 'ids' mode: a condensed system/user prompt with the same rules (fewer input tokens per case)
+ PROMPT_SHORT = os.getenv("PROMPT_SHORT", "false").lower() in ("true", "1", "yes")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index 8f038f9..41febd1 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -98,6 +98,7 @@ class PredictionResult(BaseModel):
+ _GLOBAL_BOOKLET_CACHE: Dict[str, Dict[str, Any]] = {}
+ _BOOKLET_LOCKS: Dict[Any, threading.Lock] = {}
+ _BOOKLET_LOCKS_GUARD = threading.Lock()
++_PROMPT_INPUT_JOURNAL_LOCK = threading.Lock()
+ _PARSE_CACHE_VERSION = 7  # bump when parsing or section detection changes (7: PyMuPDF source pages)
+ 
+ _COMMITTEE_SECTION = "Arguments of the initiative/referendum committee"
+@@ -434,6 +435,7 @@ class ClaimVerificationEngine:
+                 strategy=strat,
+                 booklet_path=str(booklet_pdf),
+                 numerical_conflict_msg=numerical_conflict_msg,
++                task_a=True,
+             )
+             result.tokens_prompt += translation_usage[0]
+             result.tokens_completion += translation_usage[1]
+@@ -654,6 +656,7 @@ class ClaimVerificationEngine:
+         strategy: str,
+         booklet_path: str,
+         numerical_conflict_msg: Optional[str],
++        task_a: bool = False,
+     ) -> PredictionResult:
+         """Compact mode: numbered passages in, '<label>|<passage ids>' out; evidence is verbatim passage text."""
+         def label(p: Dict[str, Any]) -> str:
+@@ -675,8 +678,20 @@ class ClaimVerificationEngine:
+             own = [f"P{k}" for k, p in enumerate(passages, 1) if p.get("section") == side]
+             if own:
+                 model_claim = f"{model_claim}\n(Passages written by the {_SPEAKER_NAMES[side]} itself: {', '.join(own)})"
++        if config.PROMPT_INPUT_JOURNAL_PATH:
++            payload = json.dumps({"claim": model_claim, "passages": texts}, sort_keys=True, ensure_ascii=False)
++            event = {"id": case_id, "task_a": task_a, "relation_prompt": bool(task_a and config.A_RELATION_PROMPT),
++                     "input_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
++                     "claim_sha256": hashlib.sha256(model_claim.encode("utf-8")).hexdigest(),
++                     "passage_count": len(texts)}
++            with _PROMPT_INPUT_JOURNAL_LOCK:
++                with open(config.PROMPT_INPUT_JOURNAL_PATH, "a", encoding="utf-8") as journal:
++                    journal.write(json.dumps(event, ensure_ascii=False) + "\n")
+         if self.prompt_mode == "ids":
+-            out = self.client.infer(context="", claim=model_claim, claim_language=claim_language, passages=texts)
++            call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
++            if task_a and config.A_RELATION_PROMPT:
++                call["task_a"] = True
++            out = self.client.infer(**call)
+         else:
+             out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote)
+         out.tokens_prompt += extra_in

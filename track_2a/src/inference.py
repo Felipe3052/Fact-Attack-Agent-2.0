@@ -98,6 +98,7 @@ class PredictionResult(BaseModel):
 _GLOBAL_BOOKLET_CACHE: Dict[str, Dict[str, Any]] = {}
 _BOOKLET_LOCKS: Dict[Any, threading.Lock] = {}
 _BOOKLET_LOCKS_GUARD = threading.Lock()
+_PROMPT_INPUT_JOURNAL_LOCK = threading.Lock()
 _PARSE_CACHE_VERSION = 7  # bump when parsing or section detection changes (7: PyMuPDF source pages)
 
 _COMMITTEE_SECTION = "Arguments of the initiative/referendum committee"
@@ -192,6 +193,14 @@ def load_parsed_booklet(pdf_path: Union[str, Path], parser: PDFParser) -> Dict[s
     except OSError:
         pass
     return parsed
+
+
+def page_char_limit(rank: int) -> int:
+    """Character window for the context page at 0-based position `rank` (the order the model sees). Evidence quotes
+    are built from the whole page (page_text) and are not affected."""
+    if config.PAGE_MAX_CHARS_TAIL and rank >= config.PAGE_FULL_RANKS:
+        return min(config.PAGE_MAX_CHARS, config.PAGE_MAX_CHARS_TAIL)
+    return config.PAGE_MAX_CHARS
 
 
 def evidence_items(passages: List[Dict[str, Any]], cited: List[int], query: str) -> List[Any]:
@@ -413,8 +422,8 @@ class ClaimVerificationEngine:
                 candidate_paras = retriever.retrieve(claim, top_k=top_k, target_vote=vote)
             if config.PAGE_MAX_CHARS:
                 query = f"{claim} {vote or ''}"
-                candidate_paras = [{**p, "text": clip_to_query(p["text"], query, config.PAGE_MAX_CHARS), "page_text": p["text"]}
-                                   for p in candidate_paras]
+                candidate_paras = [{**p, "text": clip_to_query(p["text"], query, page_char_limit(rank)), "page_text": p["text"]}
+                                   for rank, p in enumerate(candidate_paras)]
             context_blocks = []
             for p in candidate_paras:
                 context_blocks.append(f"[Page {p['page_number']}] {p['text']}")
@@ -434,6 +443,7 @@ class ClaimVerificationEngine:
                 strategy=strat,
                 booklet_path=str(booklet_pdf),
                 numerical_conflict_msg=numerical_conflict_msg,
+                task_a=True,
             )
             result.tokens_prompt += translation_usage[0]
             result.tokens_completion += translation_usage[1]
@@ -654,6 +664,7 @@ class ClaimVerificationEngine:
         strategy: str,
         booklet_path: str,
         numerical_conflict_msg: Optional[str],
+        task_a: bool = False,
     ) -> PredictionResult:
         """Compact mode: numbered passages in, '<label>|<passage ids>' out; evidence is verbatim passage text."""
         def label(p: Dict[str, Any]) -> str:
@@ -675,8 +686,22 @@ class ClaimVerificationEngine:
             own = [f"P{k}" for k, p in enumerate(passages, 1) if p.get("section") == side]
             if own:
                 model_claim = f"{model_claim}\n(Passages written by the {_SPEAKER_NAMES[side]} itself: {', '.join(own)})"
+        if config.PROMPT_INPUT_JOURNAL_PATH:
+            payload = json.dumps({"claim": model_claim, "passages": texts}, sort_keys=True, ensure_ascii=False)
+            event = {"id": case_id, "task_a": task_a, "relation_prompt": bool(task_a and config.A_RELATION_PROMPT),
+                     "skill_prompt": bool(task_a and config.A_SKILL_PROMPT),
+                     "compact_prompt": bool(task_a and config.A_COMPACT_PROMPT),
+                     "input_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+                     "claim_sha256": hashlib.sha256(model_claim.encode("utf-8")).hexdigest(),
+                     "passage_count": len(texts)}
+            with _PROMPT_INPUT_JOURNAL_LOCK:
+                with open(config.PROMPT_INPUT_JOURNAL_PATH, "a", encoding="utf-8") as journal:
+                    journal.write(json.dumps(event, ensure_ascii=False) + "\n")
         if self.prompt_mode == "ids":
-            out = self.client.infer(context="", claim=model_claim, claim_language=claim_language, passages=texts)
+            call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
+            if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
+                call["task_a"] = True
+            out = self.client.infer(**call)
         else:
             out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote)
         out.tokens_prompt += extra_in

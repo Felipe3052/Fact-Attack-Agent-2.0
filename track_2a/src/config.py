@@ -60,6 +60,10 @@ PASSAGE_CHARS = int(os.getenv("PASSAGE_CHARS", "0"))
 # sentences that best matches claim + vote title; only a few dense legal-text pages are affected.
 # 3000: test input tokens 5,725 -> 4,696 (p95 12.7k -> 7.4k), macro-F1 0.925 -> 0.928 (dev 0.908 -> 0.913)
 PAGE_MAX_CHARS = int(os.getenv("PAGE_MAX_CHARS", "3000"))
+# Experiment (task A): a smaller window for the lower-ranked context pages only. Pages after the first PAGE_FULL_RANKS
+# keep at most PAGE_MAX_CHARS_TAIL characters (0 = off). The best gold page is among the first 4 in 85 % of the cases.
+PAGE_MAX_CHARS_TAIL = int(os.getenv("PAGE_MAX_CHARS_TAIL", "0"))
+PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
 
 # Prompt mode:
 #   'ids'     - JSON with confidences + cited passage ids (default: best F1, ~55 output tokens)
@@ -69,6 +73,18 @@ PROMPT_MODE = os.getenv("PROMPT_MODE", "ids")
 
 # 'ids' mode: let the model write one short sentence before its confidences (a minimal reasoning step)
 IDS_REASON = os.getenv("IDS_REASON", "false").lower() in ("true", "1", "yes")
+
+# Prompt-screening switch: add the contrastive entity/action/property checklist to Task A only.
+# Disabled by default; it changes no submission behaviour unless explicitly enabled.
+A_RELATION_PROMPT = os.getenv("A_RELATION_PROMPT", "false").lower() in ("true", "1", "yes")
+# Prompt-screening switch: the compact claim-check skill, Task A only. Disabled by default.
+A_SKILL_PROMPT = os.getenv("A_SKILL_PROMPT", "false").lower() in ("true", "1", "yes")
+# E7/E8: compact label rules appended to the task A prompt only (ApertusClient.A_COMPACT_PROMPT_TEXT). On by default:
+# the submission image sets no pipeline variables and runs these defaults. A_COMPACT_PROMPT=false restores the
+# previous baseline, whose requests are byte-identical to 7c17c9c (tests/test_apertus_client.py)
+A_COMPACT_PROMPT = os.getenv("A_COMPACT_PROMPT", "true").lower() in ("true", "1", "yes")
+# Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
+PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
 
 # 'ids' mode: a condensed system/user prompt with the same rules (fewer input tokens per case)
 PROMPT_SHORT = os.getenv("PROMPT_SHORT", "false").lower() in ("true", "1", "yes")

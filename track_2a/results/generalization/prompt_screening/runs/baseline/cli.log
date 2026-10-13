@@ -1,0 +1,4 @@
+# pre-push cleanup 2026-10-12: 49 PyMuPDF warnings 'fontTools is required to fully parse the encoding of a CFF Type1 font ...' removed (font dictionaries only, no effect on the run)
+[timing] 180 cases, wall 331.7 s, non-LLM 1107.2 ms/case
+Successfully processed 180 case(s) -> 
+results\generalization\prompt_screening\runs\baseline\predictions.jsonl

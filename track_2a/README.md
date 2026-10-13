@@ -10,10 +10,10 @@ or **contradicts (2)** a claim, and cites the booklet pages that justify the dec
 German, French and Italian.
 
 - **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
-  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims, run once): advanced **0.93–0.94** macro-F1,
-    Hit@5 **0.83–0.85**, 3,863 input tokens; beginner **0.966**, 1,758 input tokens
-  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.943**, Hit@5 **0.869**,
-    3,866 input tokens; beginner **0.984**, 1,732 input tokens
+  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.933** macro-F1,
+    Hit@5 **0.850**, 3,980 input tokens; beginner **0.966**, 1,758 input tokens
+  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.949**, Hit@5 **0.881**,
+    3,915 input tokens; beginner **0.984**, 1,732 input tokens
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
   **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 
@@ -49,8 +49,15 @@ SPEAKER_BOOST=2                             # always include the named side's 2 
 RETRIEVAL_QUERY_MODE=union                  # BM25 with the claim and its translation into the booklet language
 EVIDENCE_POLICY=raw_pages_and_blocks        # cited PyMuPDF pages + best-matching text blocks
 REFERENCE_MAX_CHARS=6000                    # task B: longer references cut to the passages that match the claim
+A_COMPACT_PROMPT=true                       # task A: compact label rules (E7, on in the submission; false = previous baseline)
 NLI_WORKERS=4                               # cases processed in parallel by the batch CLI
 ```
+
+`A_COMPACT_PROMPT` (on by default, so active in the submission image, which sets no pipeline variable) appends four
+label rules to the task A prompt only (task B is never affected). Evaluated in
+E7 on 1,488 cases against a fresh baseline: macro-F1 0.9419 → 0.9493 (95 % date-bootstrap interval −0.002 … +0.018,
+so not significant), Hit@5 858 → 872 of 990, +2.5 % input tokens; see `docs/independent_experiments.md`, section 7.
+With `A_COMPACT_PROMPT=false` every request is byte-identical to the previous submission baseline.
 
 A value set in a local `.env` overrides these for local runs; keep only endpoint and key there.
 `python scripts/run_decision.py --data <prepared cases> --name <run>` runs exactly the submission configuration

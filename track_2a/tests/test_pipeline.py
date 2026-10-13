@@ -59,6 +59,79 @@ class TestPipeline(unittest.TestCase):
         self.assertIn(res.label, (0, 1, 2))
         self.assertEqual(res.strategy, "full")
 
+    def test_page_char_limit_only_narrows_lower_ranks_when_enabled(self):
+        from unittest.mock import patch
+        from src.inference import page_char_limit
+        with patch("src.config.PAGE_MAX_CHARS", 3000), patch("src.config.PAGE_MAX_CHARS_TAIL", 0), patch("src.config.PAGE_FULL_RANKS", 4):
+            self.assertEqual([page_char_limit(r) for r in range(8)], [3000] * 8)  # off: unchanged
+        with patch("src.config.PAGE_MAX_CHARS", 3000), patch("src.config.PAGE_MAX_CHARS_TAIL", 1500), patch("src.config.PAGE_FULL_RANKS", 4):
+            self.assertEqual([page_char_limit(r) for r in range(8)], [3000] * 4 + [1500] * 4)
+        with patch("src.config.PAGE_MAX_CHARS", 1000), patch("src.config.PAGE_MAX_CHARS_TAIL", 1500), patch("src.config.PAGE_FULL_RANKS", 4):
+            self.assertEqual(page_char_limit(6), 1000)  # never wider than the general limit
+
+    def test_tail_clipping_narrows_only_task_a_context_pages_after_the_first_four(self):
+        if not self.booklet.exists():
+            self.skipTest(f"Booklet not found at {self.booklet}")
+        import json
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"label": 0, "p_entail": 1.0, "evidence_ids": [1]}'))],
+            usage=SimpleNamespace(prompt_tokens=1, completion_tokens=1, total_tokens=2))
+
+        def run(tail):
+            client = ApertusClient(mock=True)
+            client.mock = False
+            calls = []
+            engine = ClaimVerificationEngine(apertus_client=client)
+            with patch.object(client, "_create_with_retry", side_effect=lambda **kw: (calls.append(kw), (response, None))[1]), \
+                    patch("src.config.PAGE_MAX_CHARS", 3000), patch("src.config.PAGE_MAX_CHARS_TAIL", tail), \
+                    patch("src.config.PAGE_FULL_RANKS", 4), patch("src.config.RETRIEVAL_QUERY_MODE", "original"), \
+                    patch("src.config.NLI_TOP_K", 8, create=True):
+                res = engine.verify_claim(claim="Die Initiative will die Bevölkerung auf 10 Millionen begrenzen.",
+                                          booklet_pdf=self.booklet, claim_language="de", strategy="hybrid", top_k=8,
+                                          vote="Volksinitiative «Keine 10-Millionen-Schweiz! (Nachhaltigkeitsinitiative)»")
+            return res, calls[-1]["messages"][1]["content"], calls[-1]
+
+        off_res, off_ctx, off_call = run(0)
+        on_res, on_ctx, on_call = run(1500)
+        import re
+        split = lambda ctx: re.split(r"\n\n(?=\[P\d+\] )", ctx.split("=== DOCUMENT CONTEXT ===\n", 1)[1].split("\n\n=== CLAIM ===")[0])
+        off_p, on_p = split(off_ctx), split(on_ctx)
+        self.assertEqual(len(off_p), 8)
+        self.assertEqual(len(on_p), 8)
+        self.assertEqual(off_p[:4], on_p[:4])  # the first four pages are untouched
+        for a, b in zip(off_p[4:], on_p[4:]):
+            body = lambda s: s.split(") ", 1)[1] if s.startswith("[P") and ") " in s else s
+            self.assertLessEqual(len(body(b)), 1500 + 5)
+            self.assertLessEqual(len(b), len(a))
+        self.assertLess(len(on_ctx), len(off_ctx))
+        self.assertEqual(off_call["messages"][0], on_call["messages"][0])  # system prompt unchanged
+        self.assertEqual([s.page_number for s in off_res.evidence_sources], [s.page_number for s in on_res.evidence_sources])
+        self.assertEqual(off_res.evidence, on_res.evidence)  # evidence comes from whole pages
+
+    def test_task_a_prompt_switches_never_reach_task_b(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content='{"label": 0, "evidence_ids": [1]}'))],
+            usage=SimpleNamespace(prompt_tokens=20, completion_tokens=5, total_tokens=25),
+        )
+        calls = []
+        client = ApertusClient(mock=True)
+        client.mock = False
+        engine = ClaimVerificationEngine(apertus_client=client)
+        with patch.object(client, "_create_with_retry", side_effect=lambda **kw: (calls.append(kw), (response, None))[1]), \
+                patch("src.config.A_SKILL_PROMPT", True), patch("src.config.A_RELATION_PROMPT", True), \
+                patch("src.config.A_COMPACT_PROMPT", True):
+            engine.verify_premise(claim="Der Bundesrat empfiehlt die Ablehnung.", claim_language="de",
+                                  reference="Aus Sicht von Bundesrat und Parlament: Empfehlung Nein.", case_id="b-1")
+        self.assertTrue(calls)
+        for call in calls:
+            self.assertNotIn("CLAIM CHECK", call["messages"][0]["content"])
+            self.assertNotIn("RELATION CHECK", call["messages"][0]["content"])
+            self.assertNotIn("LABEL RULES", call["messages"][0]["content"])
+
     def test_verify_premise_beginner_task(self):
         claim = "Der Bundesrat empfiehlt die Ablehnung."
         reference = "Aus Sicht von Bundesrat und Parlament bringt die Initiative Unsicherheit. Empfehlung: Nein"

@@ -1,0 +1,12 @@
+B0_submission: Hit@5 Produktion 860/990 = 0.8687  |  F0B5 875/990 = 0.8838  |  +27 / -12
+  gewonnen: nur Titel/kein Bodytreffer 12, auf Gold-Seite 15, ganze Seite 0, Zeichen median 130, Typen {'consequence': 11, 'legal_text': 2, 'federal_council': 4, 'committee': 6, 'summary': 4}
+  verloren: nur Titel/kein Bodytreffer 0, auf Gold-Seite 12, ganze Seite 12, Zeichen median 1668, Typen {'committee': 1, 'federal_council': 2, 'consequence': 2, 'summary': 7}
+  alle Treffer ohne Bodytreffer (Titel-Artefakt): Produktion 25, F0B5 117
+  Delta pro Fold: {0: 4, 1: 2, 2: 2, 3: 0, 4: 7}
+  bereinigt (nur Body-Treffer): Produktion 835/990 = 0.8434 | F0B5 758/990 = 0.7657
+B0b_repeat: Hit@5 Produktion 861/990 = 0.8697  |  F0B5 877/990 = 0.8859  |  +28 / -12
+  gewonnen: nur Titel/kein Bodytreffer 14, auf Gold-Seite 14, ganze Seite 0, Zeichen median 133, Typen {'consequence': 12, 'legal_text': 2, 'federal_council': 3, 'committee': 6, 'summary': 5}
+  verloren: nur Titel/kein Bodytreffer 0, auf Gold-Seite 12, ganze Seite 12, Zeichen median 1602, Typen {'committee': 1, 'federal_council': 1, 'consequence': 2, 'summary': 8}
+  alle Treffer ohne Bodytreffer (Titel-Artefakt): Produktion 27, F0B5 119
+  Delta pro Fold: {0: 4, 1: 3, 2: 2, 3: -1, 4: 8}
+  bereinigt (nur Body-Treffer): Produktion 834/990 = 0.8424 | F0B5 758/990 = 0.7657

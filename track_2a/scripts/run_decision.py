@@ -68,6 +68,8 @@ def main():
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="override one setting")
     parser.add_argument("--limit", type=int, help="first N cases only (smoke runs, not for decisions)")
     parser.add_argument("--output-root", type=Path, default=ROOT / "results" / "generalization")
+    parser.add_argument("--query-cache-dir", type=Path,
+                        help="reuse a translation cache across paired runs; default is a cold per-run cache")
     args = parser.parse_args()
 
     out = args.output_root / args.name
@@ -84,8 +86,9 @@ def main():
     # Private, cold caches per run (translations are re-acquired and their tokens counted); the parse cache is
     # shared, as the image's prebuilt cache is, and keyed by content and parser version
     cache = ROOT / ".cache" / "gen"
+    query_cache = args.query_cache_dir.resolve() if args.query_cache_dir else cache / "queries" / args.name
     env.update(BOOKLET_CACHE_DIR=str(cache / "booklets"), BOOKLET_CACHE_PREBUILT=str(cache / "none"),
-               QUERY_TRANSLATION_CACHE_DIR=str(cache / "queries" / args.name))
+               QUERY_TRANSLATION_CACHE_DIR=str(query_cache))
 
     names = {key: ATTRIBUTES.get(key, key) for key in wanted}
     code = ("import json, sys; from src import config; "
@@ -103,6 +106,7 @@ def main():
                 "src_uncommitted_changes": bool(dirty.strip()),
                 "src_sha256": {p.name: digest(p.read_bytes()) for p in sorted((ROOT / "src").glob("*.py"))},
                 "settings": wanted, "overrides": args.set, "effective_config": effective,
+                "query_cache_dir": str(query_cache),
                 "cases_sha256": digest((folder / "cases.jsonl").read_bytes()),
                 "dataset_manifest": json.loads((data / "manifest.json").read_text(encoding="utf-8")).get("file_hashes"),
                 "python": sys.version.split()[0], "gold_read_during_inference": False}

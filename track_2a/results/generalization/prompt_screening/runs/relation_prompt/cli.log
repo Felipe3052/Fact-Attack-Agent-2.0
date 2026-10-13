@@ -1,0 +1,3 @@
+[timing] 180 cases, wall 95.7 s, non-LLM 9.8 ms/case
+Successfully processed 180 case(s) -> 
+results\generalization\prompt_screening\runs\relation_prompt\predictions.jsonl

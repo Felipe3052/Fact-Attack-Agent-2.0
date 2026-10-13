@@ -1,0 +1,4 @@
+[timing] 90 cases, wall 51.8 s, non-LLM 73.9 ms/case
+Successfully processed 90 case(s) -> 
+<worktree>\track_2a\
+results\generalization\HO_E8_compact_prompt\predictions.jsonl
