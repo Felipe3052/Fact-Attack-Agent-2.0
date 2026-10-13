@@ -11,9 +11,9 @@ German, French and Italian.
 
 - **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
   - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.956** macro-F1,
-    Hit@5 **0.933**, 1,751 input tokens; beginner **0.966**, 1,758 input tokens
+    Hit@5 **0.933**, 1,751 input tokens; beginner **0.955**, 1,390 input tokens
   - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.968**, Hit@5 **0.975**,
-    1,750 input tokens; beginner **0.984**, 1,732 input tokens
+    1,750 input tokens; beginner **0.982**, 865 input tokens (before the task B cascade: 0.987, 1,640)
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
   **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 
@@ -49,6 +49,10 @@ SPEAKER_BOOST=2                             # always include the named side's 2 
 RETRIEVAL_QUERY_MODE=union                  # BM25 with the claim and its translation into the booklet language
 EVIDENCE_POLICY=raw_pages_and_blocks        # cited PyMuPDF pages + best-matching text blocks
 REFERENCE_MAX_CHARS=6000                    # task B: longer references cut to the passages that match the claim
+REFERENCE_MID_CHARS=3000                    # task B: references up to REFERENCE_LONG_CHARS (9000) keep this many
+B_PROMPT=topic                              # task B: short label-only first call ("" = the full prompt only)
+B_ESCALATE_BELOW=0.98                       # task B: full prompt again when the first answer is less sure
+B_SHORT_CHARS=2000                          # task B: reference characters the first call sees
 A_COMPACT_PROMPT=true                       # task A: compact label rules (E7, on in the submission; false = previous baseline)
 PART_CONTEXT=true                           # task A: context = the booklet part the claim names, via the contents page (E12)
 PART_CONTEXT_CHARS=6000                     # at most this many characters of that part

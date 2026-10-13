@@ -29,11 +29,11 @@ are saved in [`track_2a/results/generalization/`](track_2a/results/generalizatio
 | Evaluation set | Task | Macro-F1 | Evidence Hit@5 | Ø input / output tokens |
 | :--- | :--- | :---: | :---: | :---: |
 | **Unseen booklets**: own holdout on the 27 Sep 2026 vote, 90 claims | A · Advanced | **0.956** | **0.933** | 1,751 / 57 |
-| | B · Beginner | **0.966** | – | 1,758 / 60 |
+| | B · Beginner | **0.955** | – | 1,390 / 40 |
 | **Whole dataset** (v1.1, 1,488 pairs, 20 voting dates, 5 date-grouped folds) | A · Advanced | **0.968** (folds 0.954–0.978) | **0.975** | 1,750 / 59 |
-| | B · Beginner | **0.984** (folds 0.968–0.990) | – | 1,732 / 62 |
+| | B · Beginner | **0.982** (folds 0.969–0.991) | – | 865 / 21 |
 
-- Task A: booklet PDF + claim + vote. Task B: reference text + claim. Mean Apertus time per case 1.0 s (A) / 1.1 s (B);
+- Task A: booklet PDF + claim + vote. Task B: reference text + claim. Mean Apertus time per case 1.0 s (A) / 0.25 s (B);
   processing time outside the model calls stays in the millisecond range per case.
 - **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
   vote, which are not part of the dataset. Written before the system ever ran on them, labels checked by a second
@@ -58,6 +58,11 @@ measurements on the same cases ([experiment log](track_2a/docs/experiments.md#me
   (macro-F1 0.981 → 0.984), −13 % on the holdout (0.955 → 0.966). Three other ideas were measured and dropped: fewer
   legal-text pages (−0.005 F1), narrower page windows (−9 % tokens but −0.008 F1), evidence blocks ranked with the
   translated claim (+0.004 Hit@5, inconsistent).
+- **Task B cascade** (E17–E19): a short label-only prompt answers first on at most 2,000 reference characters; below a
+  label probability of 0.98 (~10 % of the cases) the full prompt is asked again. All pairs: macro-F1 0.987 → 0.982,
+  input tokens 1,640 → 865 (−48 %); on the holdout (two votes) 3 → 4 wrong labels at −22 % tokens. The token score is
+  relative to the other teams, so its net effect is estimated, not measured; `B_PROMPT=` restores the previous
+  behaviour (technical report 2.4).
 - **Four compact label rules in the task A prompt** (E7/E8): macro-F1 0.942 → 0.949, Hit@5 0.867 → 0.881 on all
   1,488 pairs (22 fixed / 11 broken) for +2.5 % tokens; neutral on the holdout. Rejected after measuring: section labels
   for navigation-bar pages (E5, noise), evidence blocks only (E6, gains only via the vote title in the gold passages),
@@ -200,6 +205,8 @@ PROMPT_MODE=ids                         # 'ids' | 'json' | 'compact'
 RETRIEVAL_QUERY_MODE=union              # BM25 with the claim and its translation into the booklet language
 EVIDENCE_POLICY=raw_pages_and_blocks    # cited PyMuPDF pages + best-matching text blocks
 REFERENCE_MAX_CHARS=6000                # task B: longer references cut to the passages that match the claim
+B_PROMPT=topic                          # task B: short label-only first call, full prompt when unsure ("" = off)
+B_ESCALATE_BELOW=0.98                   # task B: label probability below which the full prompt is asked again
 NLI_WORKERS=4                           # cases processed in parallel by the batch CLI
 ```
 

@@ -19,21 +19,21 @@ token usage and inference time.
 
 On **booklets the system never saw** (our holdout: 90 claims on the 27 September 2026 vote, labels checked by a
 second person, used only to confirm the last changes), it reaches **macro-F1 0.956** and **evidence Hit@5 0.933** on the advanced
-task (booklet PDF) and **0.966** on the beginner task (reference text). On the whole official dataset (v1.1, 1,488
-pairs, 20 voting dates in 5 date-grouped folds) the same configuration scores **0.968 / Hit@5 0.975** and **0.984**,
-at 1,750 / 1,732 input tokens and 59–62 output tokens per case, with processing time outside the LLM calls in the
-millisecond range. All scores come from the organisers' `evaluate.py` on the official CLI's output.
+task (booklet PDF) and **0.955** on the beginner task (reference text; 4 of 90 labels wrong). On the whole official
+dataset (v1.1, 1,488 pairs, 20 voting dates in 5 date-grouped folds) the same configuration scores
+**0.968 / Hit@5 0.975** and **0.982**, at 1,750 / 865 input tokens and 59 / 21 output tokens per case, with
+processing time outside the LLM calls in the millisecond range. The beginner task trades 0.005 macro-F1 (0.987 at
+1,640 input tokens before) for half the tokens (section 2.4). All scores come from the organisers' `evaluate.py` on the official CLI's output.
 
 The official score also weighs evidence, processing time and tokens (relative to the best team), so after the
-organisers' Q&A we re-tuned for it (section 2.6). The two team members first optimised separately and then merged
-their lines part by part, each choice decided by paired runs on the same cases: 8 instead of 12 pages (−31 % input
-tokens, −0.003 F1 on dev), evidence quoted from PyMuPDF pages and text blocks (Hit@5 0.73 → 0.81 on the same
-predictions), BM25 retrieval with the claim and its translation into the booklet language (macro-F1 0.930 → 0.945 on
-test), a start-up and parsing path that keeps the scored processing time in milliseconds, beginner-task references
-cut to the passages that match the claim (−30 % input tokens at equal macro-F1), four compact label rules in the
-advanced prompt (macro-F1 0.942 → 0.949) and, last, **contents-guided part selection** (2.2): every claim names its
-source in its opening, and the booklet's contents page locates that part of the vote, which becomes the whole context
-(macro-F1 0.949 → 0.968, Hit@5 0.881 → 0.975, −55 % input tokens).
+organisers' Q&A we re-tuned for it (section 2.6), each choice decided by paired runs on the same cases (5.3): 8
+instead of 12 pages (−31 % input tokens), evidence quoted from PyMuPDF pages and text blocks, BM25 retrieval with the
+claim and its translation (macro-F1 0.930 → 0.945 on test), a start-up path that keeps the scored processing time in
+milliseconds, beginner-task references cut to the matching passages and a short label-only first call that asks the
+full prompt only when it is unsure (−48 % input tokens, −0.005 F1; 2.4), four compact label rules in the advanced
+prompt (0.942 → 0.949) and, last, **contents-guided part selection** (2.2): every claim names its source in its
+opening, and the booklet's contents page locates that part of the vote, which becomes the whole context (macro-F1
+0.949 → 0.968, Hit@5 0.881 → 0.975, −55 % input tokens).
 
 The central finding for the challenge's research question: **less, but the right context wins** — the whole booklet
 (~60k tokens) reaches 0.730 macro-F1, eight retrieved pages (~3,900 tokens) 0.949, and the one part the claim refers
@@ -131,6 +131,18 @@ On all 1,488 beginner cases this saves 30 % of the input tokens at equal macro-F
 claims, against 2 changed labels when the unchanged system runs twice); on the holdout 0.955 → 0.966 at −13 %. The
 length of a reference is never used as a hint for its label.
 
+**Tokens (E17–E19).** The beginner prompt costs ~620 fixed tokens and its answer carries confidences that task B does
+not score, while tokens are scored relative to the other teams. (1) References up to 9,000 characters keep 3,000
+characters, longer ones 6,000: macro-F1 0.9845 → 0.9872, 1,732 → 1,640 input tokens. (2) A short ~190-token prompt that
+fixes the decision order (is the subject dealt with, then support, contradiction, else neutral) and answers with the
+digit alone loses 0.02–0.04 F1 by itself. (3) **Cascade (submission):** that short call sees at most 2,000 characters;
+when its label probability is below 0.98 (~10 % of the cases) the case is asked again with the full prompt of (1), and
+both calls' tokens count. Most of the short call's errors lie in that unsure part. All pairs: macro-F1 0.982,
+865 input and 21 output tokens (−48 %). On the holdout (two votes, ~30 distinct claims) it saves 22 % at 4 instead of
+3 wrong labels. The token score cannot be computed locally, so the net effect is estimated (about +0.06 on the
+beginner score if the best team uses ~820 tokens). `B_PROMPT=` restores (1); `B_ESCALATE_BELOW=0.999` with
+`B_SHORT_CHARS=2500` keeps the labels of (1) at −26 % tokens.
+
 ### 2.5 CLI and output format
 `python -m src --input cases.jsonl --output predictions.jsonl` (the Docker entrypoint) reads the official case format (JSON or JSONL; a case has
 `booklet.path` + `vote` for the advanced task or `reference.text` for the beginner task) as well as rows of the OST
@@ -208,19 +220,19 @@ with an Apertus request in flight.
 | Evaluation set | Task | Macro-F1 | Hit@5 | Input / output tokens | Apertus time (mean / p95) |
 |---|---|---:|---:|---:|---:|
 | **Holdout, unseen booklets** (90 pairs) | Advanced | **0.956** | **0.933** | 1,751 / 57 | – |
-| | Beginner | **0.966** | – | 1,758 / 60 | – |
+| | Beginner | **0.955** | – | 1,390 / 40 | – |
 | **All 1,488 pairs** (5 date folds) | Advanced | **0.968** (folds 0.954–0.978) | **0.975** | 1,750 / 59 | 1.0 s / 1.2 s |
-| | Beginner | **0.984** (folds 0.968–0.990) | – | 1,732 / 62 | 1.1 s / 1.3 s |
+| | Beginner | **0.982** (folds 0.969–0.991) | – | 865 / 21 | 0.25 s / 1.2 s |
 
 Processing time outside the model calls: ~2 ms per case (CLI estimate, cached booklets). Before part selection
-(8 retrieved pages): 0.949 / Hit@5 0.881 at 3,915 tokens on all pairs, 0.933 / 0.850 on the holdout (6 → 4 wrong
-labels with part selection). Macro-F1 and Hit@5 by language pair (booklet → claim), all 1,488 pairs per task:
+(8 retrieved pages): 0.949 / Hit@5 0.881 at 3,915 tokens on all pairs, 0.933 / 0.850 on the holdout. Macro-F1 and
+Hit@5 by language pair (booklet → claim), all 1,488 pairs per task:
 
 | Pair | de→de | de→fr | de→it | fr→de | fr→fr | fr→it | it→de | it→fr | it→it |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Advanced F1 | 0.939 | 0.933 | 0.958 | 0.995 | 0.948 | 0.990 | 0.968 | 0.974 | 0.994 |
 | Advanced Hit@5 | 0.970 | 0.933 | 0.941 | 1.000 | 0.977 | 0.992 | 0.981 | 0.969 | 1.000 |
-| Beginner F1 | 0.966 | 0.967 | 0.972 | 0.995 | 0.990 | 0.995 | 0.994 | 0.972 | 1.000 |
+| Beginner F1 | 0.980 | 0.960 | 0.958 | 0.989 | 0.979 | 0.990 | 0.994 | 0.986 | 0.994 |
 
 ### 5.2 Full document vs. selected context (advanced, same 150 test pairs)
 
@@ -245,68 +257,67 @@ names is the cheapest and the most accurate.
 | Hybrid retrieval instead of proposal filter | advanced 0.797 → 0.862 | adopted |
 | Viewpoint and recommendation rules in the prompt | advanced 0.862 → 0.870, beginner 0.980 → 0.993 | adopted |
 | Decision-Rule 0: keep the label when it disagrees with the confidences | 44 fixed / 13 broken over all saved runs; test 0.920 → 0.928 | adopted |
-| Clip pages > 3,000 characters to the best-matching window | test 0.925 → 0.928, input tokens 5,725 → 4,696 (p95 12.7k → 7.4k) | adopted |
+| Clip pages > 3,000 characters to the best-matching window | test 0.925 → 0.928, input tokens 5,725 → 4,696 | adopted |
 | 12 instead of 10 pages (after clipping) | all 1,495 pairs 0.912 → 0.931 (51 fixed / 24 broken); +~890 input tokens | adopted |
 | Speaker boost (2.2) | all pairs 0.931 → 0.940 (22 fixed / 8 broken), committee-claim errors 36 → 27, no extra tokens | adopted |
 | Decision-Rule 0b (2.3) | all pairs 0.940 → 0.945 (8 fixed / 1 broken) | adopted |
 | Thinking before answering (prefilled reasoning marker) | dev 450: 0.908 → 0.929 (20 fixed / 11 broken); ~1,300 output tokens and ~23 s per claim instead of 59 and ~2 s; a 300-token budget is worse | rejected (efficiency) |
 | Other context and answer variants: 600-character passages, claim translated for the prompt, hiding the other side, verification pass, few-shot, speaker hint, label-only with logprobs, reasoning sentence, confidence thresholds, JSON schema (`response_format`), dropping low-value pages | each broke at least as many answers as it fixed (e.g. passages 0.831 vs. 0.908, JSON schema 0.933 → 0.833) | rejected |
-| Apertus 8B instead of 70B (450 dev pairs) | 0.851 vs. 0.908 F1, p95 1.2 s vs. 4.5 s | 70B kept (quality first; Apertus latency is not scored) |
 | 8 instead of 12 pages (dev 300, official scorer) | F1 0.937 → 0.934, Hit@5 0.70 → 0.76, input tokens 5,370 → 3,721; k=7 / 6: F1 0.924 / 0.904; test F1 0.945 → 0.928 | adopted (tokens are scored) |
 | Condensed system prompt (`PROMPT_SHORT`) | dev 300 B 0.980 → 0.850, A 0.937 → 0.781, 6–13 % fewer input tokens | rejected |
 | Evidence: PyMuPDF pages + 2 best text blocks (same predictions) | dev 300 0.792 → 0.872, test 0.727 → 0.813 | adopted |
 | Retrieval with claim + translation (`union`, paired real runs) | dev 300 0.934 → 0.944, test 0.930 → 0.945, all 1,488 0.948 → 0.956; ~3 % more tokens | adopted |
 | *Paired runs on all 1,488 pairs per task (5 date folds; unchanged system run twice: 3 / 2 labels change):* | | |
-| E1 / E3 / E11: fewer legal-text pages, 2,000-character windows, shorter lower-ranked pages | A 0.943 → 0.937 / 0.934, 0.949 → 0.943; −3 / −9 / −8 % tokens | rejected |
+| E1 / E3 / E11 / E4–E6: fewer legal-text pages, narrower windows, shorter lower-ranked pages; other evidence rankings | A 0.949 → 0.943 at −3 … −9 % tokens; Hit@5 within noise | rejected |
 | E2: beginner references > 6,000 chars cut to the matching passages | B 0.981 → 0.984, −30 % input tokens; holdout 0.955 → 0.966 | adopted |
-| E4 / E5 / E6: evidence ranked with the translation, labels for navigation-bar pages, five text blocks instead of pages | Hit@5 within noise (E4, E5); E6 +0.015 only via the vote title that opens every gold passage (passage body 0.843 → 0.766) | rejected |
 | E7/E8: four compact label rules in the advanced prompt | A 0.942 → 0.949 (22 fixed / 11 broken), Hit@5 0.867 → 0.881, +2.5 % tokens; holdout unchanged (2 / 2) | adopted |
 | **E12: contents-guided part selection (2.2)** | A 0.949 → 0.968 (56 / 29; date bootstrap +0.005 … +0.035), Hit@5 0.881 → 0.975, −55 % tokens; holdout 0.933 → 0.956 | **adopted** |
-| E13: the system prompt's rules in fewer words (−210 tokens) | A 0.968 → 0.952 (16 / 40), B 0.984 → ~0.94; errors turn to contradiction | rejected |
-| E14: part budget 4,000 instead of 6,000 characters | A 0.968 → 0.948 (7 / 37), Hit@5 0.975 → 0.940, −6.5 % tokens | rejected |
-| E15 / E16: task B references cut at 3,000 chars / label-only answer | B 0.984 → 0.980 (−21 % tokens) / 0.871 (no confidences: N→C) | rejected |
+| E13 / E14: the prompt's rules in fewer words (−210 tokens) / part budget 4,000 instead of 6,000 chars | A 0.968 → 0.952 (B → ~0.94; errors turn to contradiction) / A → 0.948, Hit@5 → 0.940 | rejected |
+| E15 / E16: task B references cut at 3,000 chars / label-only answer inside the full prompt | B 0.984 → 0.980 (−21 % tokens) / 0.871 (no confidences: N→C) | rejected |
+| E17a: task B references ≤ 9,000 chars cut to 3,000 | B 0.9845 → 0.9872, −5 % tokens; holdout equal | adopted |
+| E18: short label-only prompts (four variants, 190 tokens) | B 0.987 → 0.948–0.966, −30 % tokens | rejected alone |
+| **E19c: cascade, short call (≤ 2,000 chars), full prompt below p = 0.98** | B 0.987 → 0.982, −48 % tokens; holdout 3 → 4–6 wrong of 90, −22 % | **adopted** |
+| E21b: cascade at p = 0.999, 2,500 chars | B 0.987 → 0.987, −26 % tokens; holdout +18 % tokens | settings only |
 
 Full tables: [docs/experiments.md](docs/experiments.md) and [docs/independent_experiments.md](docs/independent_experiments.md).
 Runs on 150 pairs carry about ±3 F1 points of sampling noise; close decisions were re-run on 450 pairs, the last
-ones on all pairs. A proxy measured without the model (is the gold page in the context, is the gold text still
-visible) predicted gains for E1, E3 and E11 that the real runs did not show: the model needs the lower-ranked pages too.
+ones on all pairs. A proxy without the model predicted gains for E1, E3 and E11 that the real runs did not show.
 
 ### 5.4 What we learned about Apertus
 
 - **Selected context beats more context.** With the whole booklet (~60k tokens) Apertus 70B reaches 0.73 macro-F1,
-  with 10 selected pages 0.93, with only the part the claim refers to 0.97. We found no position effect ("lost in the middle"): the full-document runs fail even
-  when the answer is in the first third of the booklet, so the degradation is general distraction.
+  with 10 selected pages 0.93, with only the part the claim refers to 0.97. There is no position effect ("lost in the
+  middle"); the degradation is general distraction.
 - **Apertus is over-confident.** Its self-reported confidences are 0 or 1 in 97–99 % of cases, and the probability of
-  the label token is ~1.0 for wrong answers as well as for correct ones (41 wrong vs. 40 correct dev answers).
-  Confidence thresholds cannot filter its errors.
+  the label token is ~1.0 for wrong answers as well as for correct ones (41 wrong vs. 40 correct dev answers):
+  thresholds cannot filter the errors of the full prompt. The short task B call is the exception: 84 % of its
+  answers are saturated and its errors lie in the rest, which the cascade (2.4) re-asks.
 - **Distraction, not missing text, caused most errors.** With 8 retrieved pages the gold page was in the context in
   97.9 % of the Entailment/Contradiction cases and in 69 of 85 label errors; removing the other parts and votes
   (E12) fixed 56 answers. Trimming the part itself (E14) or the prompt's wording (E13) costs accuracy at once.
-- **Speaker attribution was a context problem.** Committee claims failed in 13.4 % of cases with retrieved pages and
-  no prompt change helped; with the committee's own part as the context, 3 of 275 fail.
+- **Speaker attribution was a context problem.** Committee claims failed in 13.4 % of cases with retrieved pages;
+  with the committee's own part as the context, 3 of 275 fail.
 - **Thinking helps, at a high price.** Letting the thinking model reason before its answer fixes half of the remaining
-  dev errors (+0.021 F1 on dev 450), but needs ~22× the output tokens and ~11× the latency. A prompt instruction alone does not make it
-  think first; the reasoning marker has to be prefilled. Selective thinking saves little (it is needed on ~3/4 of claims), and a short hard budget is worse.
-- **Apertus 8B** is ~3.5× faster but 6 F1 points weaker than 70B on the same contexts.
+  dev errors (+0.021 F1 on dev 450), but needs ~22× the output tokens and ~11× the latency; the reasoning marker has
+  to be prefilled, and selective thinking or a short budget saves little. **Apertus 8B** is ~3.5× faster but 6 F1
+  points weaker than 70B on the same contexts.
 
 ---
 
 ## 6. Limitations
 
-- **Remaining errors** (advanced, 48 of 1,488 pairs): Contradiction → Neutral 15, Contradiction → Entailment 11,
-  Entailment → Contradiction 9, Neutral → Contradiction 8, Entailment → Neutral 5. Claims about the voting text fail
-  most often (22 of 214), as long legal texts exceed the 6,000-character budget.
-- **Part selection relies on the claims naming their source** and on the contents page of the booklets (2020–2026,
-  checked on 62 booklets). A claim without such an opening, or a booklet without a readable contents page, falls back to
-  the retrieval of 8 pages (0.949 / Hit@5 0.881). The jury's claims may be phrased differently.
-- **Unseen booklets:** the holdout (0.956 advanced, 0.966 beginner) covers one vote with two proposals and 90
-  claims written by us (± ~0.05). The jury's set may differ in layout and claim style.
-- **License:** the evidence quotes need PyMuPDF (AGPL-3.0), so the image as a whole is distributed under the AGPL.
-- **Development data:** all 20 dates of the dataset, including the former test split, have been used for decisions;
-  the holdout only confirmed E2 and checked E8 and E12 for regressions.
-- **Processing time and tokens** are measured by the organisers' proxy; our own numbers are estimates (client-side
-  token counts, in-flight clock). Booklets outside the 60 dataset booklets are parsed at run time (in parallel).
-- **Not political advice:** outputs describe the relationship between a claim and the official booklet only.
+- **Remaining errors** (advanced, 48 of 1,488 pairs): Contradiction → Neutral 15, → Entailment 11, Entailment →
+  Contradiction 9, Neutral → Contradiction 8, Entailment → Neutral 5. Claims about the voting text fail most often (22
+  of 214): long legal texts exceed the 6,000-character budget.
+- **Part selection relies on the claims naming their source** and on a readable contents page (2020–2026, 62
+  booklets); otherwise it falls back to the retrieval of 8 pages (0.949 / Hit@5 0.881).
+- **Unseen booklets:** the holdout (0.956 advanced, 0.955 beginner) covers two votes with 90 claims written by us
+  (± ~0.05). The jury's set may differ in layout and claim style.
+- **License:** PyMuPDF (AGPL-3.0) is needed for the evidence quotes, so the image is AGPL.
+- **Development data:** all 20 dates of the dataset have been used for decisions; the holdout only confirmed E2, E8,
+  E12 and E19c (on two votes). Our time and token numbers are estimates (client-side counts, in-flight clock); booklets
+  outside the 60 dataset booklets are parsed at run time.
+- **Not political advice:** outputs only describe the relationship between a claim and the booklet.
 
 ---
 
@@ -319,28 +330,21 @@ docker run --rm -e BASE_URL -e API_KEY -v "$PWD/cases:/data:ro" -v "$PWD/output:
 make test                                                      # unit tests, no API calls
 ```
 
-Cases come from the starter repo's `prepare_cases.py` (or `scripts/prepare_competition_cases.py` for all pairs with
-date folds, `scripts/build_holdout.py` for the holdout) and are scored with its `evaluate.py`. `scripts/run_decision.py`
-runs the submission configuration through the official CLI and keeps predictions, scores and settings in
-`results/generalization/`; `scripts/report_decision.py` compares two runs. Repeated runs differ by a few pairs.
+Cases come from the starter repo's `prepare_cases.py` (or `scripts/prepare_competition_cases.py`, `build_holdout.py`)
+and are scored with its `evaluate.py`; `scripts/run_decision.py` runs the submission configuration through the
+official CLI and keeps predictions, scores and settings in `results/generalization/`.
 
 Settings: `.env.example` lists every setting with its default (a test keeps it equal to `src/config.py`), among them
-`NLI_TOP_K` (`8`), `PAGE_MAX_CHARS` (`3000`), `PROMPT_MODE` (`ids`), `RETRIEVAL_QUERY_MODE` (`union`),
-`EVIDENCE_POLICY` (`raw_pages_and_blocks`), `REFERENCE_MAX_CHARS` (`6000`), `A_COMPACT_PROMPT` (`true`),
-`PART_CONTEXT` (`true`), `PART_CONTEXT_CHARS` (`6000`), `NLI_WORKERS` (`4`).
+`NLI_TOP_K` (`8`), `PROMPT_MODE` (`ids`), `RETRIEVAL_QUERY_MODE` (`union`), `PART_CONTEXT` (`true`),
+`REFERENCE_MID_CHARS` (`3000`), `B_PROMPT` (`topic`), `B_ESCALATE_BELOW` (`0.98`), `B_SHORT_CHARS` (`2000`).
 
 ---
 
 ## 8. Next steps
 
-1. Claims without a recognisable opening: choose the part from the claim's content (e.g. by asking Apertus once),
-   and long voting texts: select their articles rather than whole pages.
-2. The remaining Contradiction → Neutral errors; reasoning at lower cost (thinking: +0.02 F1 at ~11× latency).
-3. A larger holdout over several new votes, labelled independently, to narrow the ± 0.05 on unseen booklets.
+1. Claims without a recognisable opening: choose the part from the claim's content; long voting texts: select
+   their articles rather than whole pages.
+2. The remaining Contradiction → Neutral errors; reasoning at lower cost.
+3. A larger holdout over several new votes (the cascade saw only two).
 
----
-
-## License
-
-Code: Apache-2.0 ([LICENSE](../LICENSE)); this report: CC-BY-4.0 (Hack Apertus terms, section 6). With PyMuPDF
-(AGPL-3.0) the image as a whole is AGPL-3.0, with this repository as its complete source.
+**License:** code Apache-2.0 ([LICENSE](../LICENSE)); report CC-BY-4.0. With PyMuPDF (AGPL-3.0) the image is AGPL-3.0.
