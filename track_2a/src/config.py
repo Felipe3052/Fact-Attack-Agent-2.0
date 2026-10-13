@@ -77,6 +77,19 @@ PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
 QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")
 # Experiment (task B): ask for the label only, without confidences and passage ids (task B evidence is not scored)
 B_LABEL_ONLY = os.getenv("B_LABEL_ONLY", "false").lower() in ("true", "1", "yes")
+# Task B (experiment E18): name of a short label-only prompt in ApertusClient.B_PROMPTS ("" = the full prompt of 'ids'
+# mode). The answer is the label digit alone and the passages are sent unnumbered, because task B's evidence is not scored.
+B_PROMPT = os.getenv("B_PROMPT", "topic").strip()
+# Task B label-only prompt: log-space bias added to the label probabilities (labels 0,1,2) before the argmax, e.g.
+# "0,0.5,0"; empty = the model's own label. B_PROBS_JOURNAL_PATH: one JSON line per case with the probabilities.
+B_BIAS = [float(v) for v in os.getenv("B_BIAS", "").split(",") if v.strip()]
+B_PROBS_JOURNAL_PATH = os.getenv("B_PROBS_JOURNAL_PATH", "").strip()
+# Task B cascade (E19): when the label-only answer's top probability is below this value (or unreadable), the case is
+# asked again with the full prompt of 'ids' mode and that answer counts (0 = no second call). Both calls' tokens count.
+B_ESCALATE_BELOW = float(os.getenv("B_ESCALATE_BELOW", "0.98"))
+# Task B cascade: characters of the reference the first (label-only) call sees; the second call keeps the full budget
+# (0 = the same passages in both calls). A cut reference makes the first answer less sure, so more cases escalate.
+B_SHORT_CHARS = int(os.getenv("B_SHORT_CHARS", "2000"))
 # Experiment (both tasks, 'ids' mode): the system prompt's rules in fewer words (ApertusClient.LEAN_SYSTEM_PROMPT)
 PROMPT_LEAN = os.getenv("PROMPT_LEAN", "false").lower() in ("true", "1", "yes")
 

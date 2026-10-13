@@ -1,0 +1,124 @@
+diff --git a/track_2a/src/apertus_client.py b/track_2a/src/apertus_client.py
+index 50f6e1a..a1d08bb 100644
+--- a/track_2a/src/apertus_client.py
++++ b/track_2a/src/apertus_client.py
+@@ -128,6 +128,90 @@ class ApertusClient:
+         "e.g. '0|P2' or '2|P3,P7'. For neutral answer '1|'. No other text."
+     )
+ 
++    # Task B prompts (E18): label only, no ids, no confidences. The rule order is the point: without a stated order
++    # Apertus labels unrelated passages as contradiction (E13, E16). Written for this project.
++    B_PROMPTS = {
++        "topic": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do: 0 if they support the claim; 2 only if they state something that cannot be true "
++            "together with the claim (a different number or date, the opposite recommendation); otherwise 1.\n"
++            "Missing information is never a contradiction. 'According to the summary / the committee / the Federal "
++            "Council, X' is 1 when that text does not say X.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
++        ),
++        "topic2": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
++            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
++            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
++            "nothing about that particular point.\n"
++            "'According to the summary / the committee / the Federal Council, X' is 1 when that text does not say X.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
++        ),
++        "topic3": (
++            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
++            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
++            "never outside knowledge.\n"
++            "Decide in this order:\n"
++            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
++            "the label is 1.\n"
++            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
++            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
++            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
++            "nothing about that particular point.\n"
++            "Do not choose 1 just because the claim is a negation or a restriction (no, not, only, never, any, "
++            "all): check whether the passages say the opposite. A claim that merely adds a detail the passages do "
++            "not mention is 1.\n"
++            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
++        ),
++    }
++
++    def infer_label(
++        self,
++        passages: List[str],
++        claim: str,
++        claim_language: Optional[str] = None,
++        prompt: str = "topic",
++    ) -> NLIOutput:
++        """Task B, label only: the short prompt B_PROMPTS[prompt], unnumbered passages, the label digit as the answer."""
++        start_time = time.time()
++        system_prompt = self.B_PROMPTS[prompt]
++        reference = "\n\n".join(passages)
++        lang = f" ({claim_language})" if claim_language else ""
++        user_prompt = f"REFERENCE:\n{reference}\n\nCLAIM{lang}: {claim}\nLabel:"
++        if self.mock:
++            return self._mock_infer(reference, claim, 15.0)
++        response, err = self._create_with_retry(
++            model=self.model_name,
++            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
++            temperature=0.0,
++            max_tokens=8,
++            timeout=45.0,
++        )
++        latency_ms = round((time.time() - start_time) * 1000, 2)
++        if response is None:
++            return NLIOutput(label=1, reasoning=f"API Error: {err}", error=f"api: {err}", latency_ms=latency_ms)
++        content = (response.choices[0].message.content or "").strip()
++        m = re.search(r"[012]", content)
++        if not m:
++            return NLIOutput(label=1, reasoning=f"Unparseable answer: {content!r}", error=f"parse: {content!r}",
++                             latency_ms=latency_ms)
++        usage = getattr(response, "usage", None)
++        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens(system_prompt + user_prompt)
++        tc = getattr(usage, "completion_tokens", None) or self._estimate_tokens(content)
++        return NLIOutput(label=int(m.group(0)), reasoning=f"Apertus answer: {content}", tokens_prompt=tp,
++                         tokens_completion=tc, tokens_total=tp + tc, latency_ms=latency_ms)
++
+     def infer_compact(
+         self,
+         passages: List[str],
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index f033194..317a63e 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -77,6 +77,9 @@ PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
+ QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")
+ # Experiment (task B): ask for the label only, without confidences and passage ids (task B evidence is not scored)
+ B_LABEL_ONLY = os.getenv("B_LABEL_ONLY", "false").lower() in ("true", "1", "yes")
++# Task B (experiment E18): name of a short label-only prompt in ApertusClient.B_PROMPTS ("" = the full prompt of 'ids'
++# mode). The answer is the label digit alone and the passages are sent unnumbered, because task B's evidence is not scored.
++B_PROMPT = os.getenv("B_PROMPT", "").strip()
+ # Experiment (both tasks, 'ids' mode): the system prompt's rules in fewer words (ApertusClient.LEAN_SYSTEM_PROMPT)
+ PROMPT_LEAN = os.getenv("PROMPT_LEAN", "false").lower() in ("true", "1", "yes")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index c49543e..025c8c0 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -832,7 +832,9 @@ class ClaimVerificationEngine:
+             with _PROMPT_INPUT_JOURNAL_LOCK:
+                 with open(config.PROMPT_INPUT_JOURNAL_PATH, "a", encoding="utf-8") as journal:
+                     journal.write(json.dumps(event, ensure_ascii=False) + "\n")
+-        if self.prompt_mode == "ids":
++        if not task_a and config.B_PROMPT:
++            out = self.client.infer_label(texts, model_claim, claim_language=claim_language, prompt=config.B_PROMPT)
++        elif self.prompt_mode == "ids":
+             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
+             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
+                 call["task_a"] = True

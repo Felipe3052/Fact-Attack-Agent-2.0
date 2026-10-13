@@ -128,6 +128,123 @@ class ApertusClient:
         "e.g. '0|P2' or '2|P3,P7'. For neutral answer '1|'. No other text."
     )
 
+    # Task B prompts (E18): label only, no ids, no confidences. The rule order is the point: without a stated order
+    # Apertus labels unrelated passages as contradiction (E13, E16). Written for this project.
+    B_PROMPTS = {
+        "topic": (
+            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
+            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
+            "never outside knowledge.\n"
+            "Decide in this order:\n"
+            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
+            "the label is 1.\n"
+            "2. If they do: 0 if they support the claim; 2 only if they state something that cannot be true "
+            "together with the claim (a different number or date, the opposite recommendation); otherwise 1.\n"
+            "Missing information is never a contradiction. 'According to the summary / the committee / the Federal "
+            "Council, X' is 1 when that text does not say X.\n"
+            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
+        ),
+        "topic2": (
+            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
+            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
+            "never outside knowledge.\n"
+            "Decide in this order:\n"
+            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
+            "the label is 1.\n"
+            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
+            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
+            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
+            "nothing about that particular point.\n"
+            "'According to the summary / the committee / the Federal Council, X' is 1 when that text does not say X.\n"
+            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
+        ),
+        "topic3": (
+            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
+            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
+            "never outside knowledge.\n"
+            "Decide in this order:\n"
+            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
+            "the label is 1.\n"
+            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
+            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
+            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
+            "nothing about that particular point.\n"
+            "Do not choose 1 just because the claim is a negation or a restriction (no, not, only, never, any, "
+            "all): check whether the passages say the opposite. A claim that merely adds a detail the passages do "
+            "not mention is 1.\n"
+            "Labels: 0 entailment, 1 neutral, 2 contradiction. Answer with the digit only."
+        ),
+        "topic4": (
+            "You check a CLAIM against REFERENCE passages from an official Swiss federal voting booklet. They may be "
+            "in different languages (German, French, Italian): compare meaning, not wording. Use only the passages, "
+            "never outside knowledge.\n"
+            "Decide in this order:\n"
+            "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, "
+            "the label is 1.\n"
+            "2. If they do, compare what the claim asserts with what the passages say about that point: 0 if the "
+            "passages say the same; 2 if they say the opposite or something incompatible (a negation, a reversed "
+            "permission or condition, another number, date, name or recommendation); 1 only if the passages say "
+            "nothing about that particular point.\n"
+            "Labels: 0 entailment, 1 neutral, 2 contradiction.\n"
+            "Answer in one line: what the passages say about the claim in at most 12 words, then => and the label digit."
+        ),
+    }
+
+    B_REASON_PROMPTS = {"topic4"}
+
+    def infer_label(
+        self,
+        passages: List[str],
+        claim: str,
+        claim_language: Optional[str] = None,
+        prompt: str = "topic",
+    ) -> NLIOutput:
+        """Task B, label only: the short prompt B_PROMPTS[prompt], unnumbered passages, the label digit as the answer."""
+        start_time = time.time()
+        system_prompt = self.B_PROMPTS[prompt]
+        reference = "\n\n".join(passages)
+        lang = f" ({claim_language})" if claim_language else ""
+        user_prompt = f"REFERENCE:\n{reference}\n\nCLAIM{lang}: {claim}\nLabel:"
+        if self.mock:
+            return self._mock_infer(reference, claim, 15.0)
+        response, err = self._create_with_retry(
+            model=self.model_name,
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+            temperature=0.0,
+            max_tokens=48 if prompt in self.B_REASON_PROMPTS else 8,
+            timeout=45.0,
+            **({} if prompt in self.B_REASON_PROMPTS else {"logprobs": True, "top_logprobs": 5}),
+        )
+        if response is None and prompt not in self.B_REASON_PROMPTS:
+            # an endpoint that refuses logprobs: the same request without them (the cascade then asks again)
+            response, err = self._create_with_retry(
+                model=self.model_name,
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                temperature=0.0, max_tokens=8, timeout=45.0)
+        latency_ms = round((time.time() - start_time) * 1000, 2)
+        if response is None:
+            return NLIOutput(label=1, reasoning=f"API Error: {err}", error=f"api: {err}", latency_ms=latency_ms)
+        content = (response.choices[0].message.content or "").strip()
+        probs = self._label_probs(response.choices[0])
+        m = re.search(r"[012]", content)
+        if prompt in self.B_REASON_PROMPTS:
+            m = re.search(r"=>\s*([012])", content) or re.search(r"([012])\W*$", content)
+            probs = {}
+            if m and m.lastindex:
+                m = re.match(r"([012])", m.group(1))
+        if config.B_BIAS and len(config.B_BIAS) == 3 and len(probs) == 3 and all(v > 0 for v in probs.values()):
+            label = max(probs, key=lambda k: math.log(probs[k]) + config.B_BIAS[k])
+            m = re.match(r"(.)", str(label))
+        if not m:
+            return NLIOutput(label=1, reasoning=f"Unparseable answer: {content!r}", error=f"parse: {content!r}",
+                             latency_ms=latency_ms)
+        usage = getattr(response, "usage", None)
+        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens(system_prompt + user_prompt)
+        tc = getattr(usage, "completion_tokens", None) or self._estimate_tokens(content)
+        return NLIOutput(label=int(m.group(0)), reasoning=f"Apertus answer: {content}", tokens_prompt=tp,
+                         tokens_completion=tc, tokens_total=tp + tc, latency_ms=latency_ms,
+                         p_entail=probs.get(0, 0.0), p_neutral=probs.get(1, 0.0), p_contra=probs.get(2, 0.0))
+
     def infer_compact(
         self,
         passages: List[str],
