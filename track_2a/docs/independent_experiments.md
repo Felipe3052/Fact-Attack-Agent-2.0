@@ -739,6 +739,20 @@ Holdout (27 Sep 2026 booklets, 90 balanced task B claims, new booklets):
 - **Run to run:** the adopted defaults without any `--set` (`E20_default_cascade`, `HO_E20_default_cascade`) give
   macro-F1 0.9818 / 27 wrong at 886 tokens on the dataset and 4 wrong at 1,429 tokens on the holdout; E19c was
   0.9832 / 25 and 6. The same configuration differs by about two labels between runs.
+- **Stricter threshold (E21, `B_ESCALATE_BELOW=0.999`):**
+
+| | E17a | E19c (0.98, 2,000) | E21a (0.999, 2,000) | E21b (0.999, 2,500) |
+|---|---:|---:|---:|---:|
+| Dataset: macro-F1 / wrong | 0.9872 / 19 | 0.9832 / 25 | 0.9858 / 21 | **0.9872 / 19** (0 fixed, 0 broken) |
+| Dataset: tokens | 1,708 | 888 | 1,126 | 1,270 (−26 %) |
+| Holdout: wrong of 90 | 3 | 6 (4 in the default run) | 4 | 4 |
+| Holdout: tokens | 1,810 | 1,413 | 1,901 (+5 %) | 2,139 (+18 %) |
+
+  On the dataset E21b is the one configuration that keeps the labels of E17a exactly and still saves tokens. On the
+  unseen booklets of the holdout the first call is less sure, so the stricter threshold escalates far more cases and
+  the cascade costs more than E17a there. The cascade is therefore a trade of tokens against a small F1 risk, not a
+  free gain: no configuration here is better on both sets. The token and time scores are relative to the other
+  teams and cannot be computed locally (the starter scorer says so), so the effect on S_B is only estimated.
 - **Decision: E19c adopted** (`B_PROMPT=topic`, `B_ESCALATE_BELOW=0.98`, `B_SHORT_CHARS=2000`, defaults in
   `src/config.py` and both `.env.example` files). An endpoint without logprobs makes every case escalate (the full
   prompt again, so the labels stay those of E17a at ~2.1× the tokens); a refused `logprobs` parameter is retried
