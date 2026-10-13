@@ -308,6 +308,14 @@ class ClaimVerificationEngine:
                 _GLOBAL_BOOKLET_CACHE[key] = {**parsed, "retriever": PassageRetriever(parsed["paragraphs"])}
         return _GLOBAL_BOOKLET_CACHE[key]
 
+    def _ready_booklet_data(self, pdf_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
+        """The parsed booklet if it is in memory or in the parse cache on disk (cheap to load), else None (no waiting)."""
+        if not config.CACHE_SINGLE_FLIGHT:
+            data = _GLOBAL_BOOKLET_CACHE.get(str(Path(pdf_path).resolve()))
+            if data is not None:
+                return data
+        return self._get_booklet_data(pdf_path) if is_parse_cached(pdf_path) else None
+
     def _booklet_parts(self, booklet_data: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
         """Page ranges of the booklet's votes and parts from its contents page (PART_CONTEXT), computed once."""
         if "section_parts" not in booklet_data:
@@ -328,8 +336,21 @@ class ClaimVerificationEngine:
             booklet_data["section_parts"] = parts
         return booklet_data["section_parts"]
 
-    def _part_passages(self, booklet_data: Dict[str, Any], claim: str, vote: Optional[str],
-                         claim_language: Optional[str], booklet_language: Optional[str]):
+    def _quick_parts(self, quick) -> Optional[List[Dict[str, Any]]]:
+        """_booklet_parts for a booklet read page by page (QUICK_PARTS): PyMuPDF contents, speakers per vote on demand."""
+        if "parts" not in quick.parts_cache:
+            from src import part_context
+            from src.quick_booklet import SourceTexts
+            try:
+                parts = part_context.booklet_parts(SourceTexts(quick), quick.speakers)
+            except Exception as exc:
+                print(f"[warning] contents page not readable ({type(exc).__name__})", file=sys.stderr)
+                parts = None
+            quick.parts_cache["parts"] = parts
+        return quick.parts_cache["parts"]
+
+    def _part_passages(self, booklet_data: Optional[Dict[str, Any]], claim: str, vote: Optional[str],
+                       claim_language: Optional[str], booklet_language: Optional[str], quick=None):
         """
         PART_CONTEXT: the pages of the part the claim names, of the case's vote, in reading order, at most
         PART_CONTEXT_CHARS characters. A part over the budget keeps its best-matching pages (BM25 with the claim, its
@@ -337,14 +358,21 @@ class ClaimVerificationEngine:
         Returns (passages, translation token usage) or None when no part is found for the claim.
         """
         from src import part_context
-        found = part_context.part_pages(claim, vote, self._booklet_parts(booklet_data))
+        if quick is None:
+            parts = self._booklet_parts(booklet_data)
+            by_page = {}
+            for p in booklet_data["paragraphs"]:
+                by_page.setdefault(p["page_number"], p)
+            passage = by_page.get
+            lead_text = lambda: " ".join(p["text"] for p in booklet_data["pages"][:3])  # noqa: E731
+        else:  # booklet not parsed yet: the same passages, read page by page (src/quick_booklet.py)
+            parts, passage = self._quick_parts(quick), quick.passage
+            lead_text = lambda: " ".join(quick.first_texts(3))  # noqa: E731
+        found = part_context.part_pages(claim, vote, parts)
         if not found:
             return None
         part, pages = found
-        by_page = {}
-        for p in booklet_data["paragraphs"]:
-            by_page.setdefault(p["page_number"], p)
-        candidates = [by_page[n] for n in pages if n in by_page and by_page[n]["text"].strip()]
+        candidates = [c for c in (passage(n) for n in pages) if c and c["text"].strip()]
         if not candidates:
             return None
         label = _PART_LABELS[part]
@@ -352,7 +380,7 @@ class ClaimVerificationEngine:
         if sum(len(p["text"]) for p in candidates) > budget:
             variants = None
             if config.RETRIEVAL_QUERY_MODE != "original":
-                source_language = booklet_language or guess_language(" ".join(p["text"] for p in booklet_data["pages"][:3]))
+                source_language = booklet_language or guess_language(lead_text())
                 language = claim_language or guess_language(claim)
                 if language != source_language:
                     translated, usage, _ = self._translate_query(claim, language, source_language)
@@ -409,8 +437,16 @@ class ClaimVerificationEngine:
         if config.EVIDENCE_POLICY == "legacy" or result.strategy == "direct_reference" or result.error:
             return result
         from src.evidence import ParsedSourcePages, SourcePages, construct_evidence
-        stored = self._get_booklet_data(result.booklet_path).get("source_pages")
-        if stored:
+        ready = self._ready_booklet_data(result.booklet_path)
+        if ready is None and config.QUICK_PARTS:  # booklet still being parsed: its pages one by one
+            from src import quick_booklet
+            from src.quick_booklet import QuickSourcePages
+            stored, pages = None, QuickSourcePages(quick_booklet.booklet(result.booklet_path))
+        else:
+            stored = (ready or self._get_booklet_data(result.booklet_path)).get("source_pages")
+        if ready is None and config.QUICK_PARTS:
+            pass  # pages: QuickSourcePages above
+        elif stored:
             pages = ParsedSourcePages(stored)  # read with the parse: no PDF access here
         else:
             with self._source_pages_lock:
@@ -447,14 +483,26 @@ class ClaimVerificationEngine:
         Supports ADVANCED TASK from Hack Apertus: accepts optional 'vote' title to scope proposal.
         """
         strat = strategy or self.strategy
-        booklet_data = self._get_booklet_data(booklet_pdf)
         retrieval_claim, query_variants = claim, None
         translation_usage, query_metadata = (0, 0), {}
         part_ctx = None
-        if config.PART_CONTEXT and strat == "hybrid" and self.prompt_mode in ("ids", "compact"):
-            part_ctx = self._part_passages(booklet_data, claim, vote, claim_language, booklet_language)
-            if part_ctx:
-                translation_usage = part_ctx[1]
+        use_parts = config.PART_CONTEXT and strat == "hybrid" and self.prompt_mode in ("ids", "compact")
+        booklet_data = self._ready_booklet_data(booklet_pdf)
+        if booklet_data is None and use_parts and config.QUICK_PARTS:
+            # not parsed yet: the part's pages are read on their own while the full parse goes on in the background
+            from src import quick_booklet
+            try:
+                part_ctx = self._part_passages(None, claim, vote, claim_language, booklet_language,
+                                               quick=quick_booklet.booklet(booklet_pdf))
+            except Exception as exc:  # anything unexpected: the regular path below
+                print(f"[warning] page-by-page reading failed ({type(exc).__name__}): full parse", file=sys.stderr)
+                part_ctx = None
+        if part_ctx is None:
+            booklet_data = booklet_data or self._get_booklet_data(booklet_pdf)
+            if use_parts:
+                part_ctx = self._part_passages(booklet_data, claim, vote, claim_language, booklet_language)
+        if part_ctx:
+            translation_usage = part_ctx[1]
         # Query translation only applies to hybrid ids/compact retrieval with an unchanged NLI claim; other
         # strategies (now that 'union' is the default) simply retrieve with the original claim
         if part_ctx:
@@ -779,6 +827,8 @@ class ClaimVerificationEngine:
             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
                 call["task_a"] = True
+            if not task_a and config.B_LABEL_ONLY:
+                call["label_only"] = True
             out = self.client.infer(**call)
         else:
             out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote)

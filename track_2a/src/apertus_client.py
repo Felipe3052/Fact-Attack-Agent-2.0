@@ -50,6 +50,22 @@ class InFlightClock:
 
 LLM_CLOCK = InFlightClock()
 
+# Model the endpoint actually serves, if it refused the configured one (set at most once per run by _switch_model)
+_MODEL_PREFERENCE = ("swiss-ai/Apertus-v1.5-70B-thinking", "swiss-ai/Apertus-v1.5-70B",
+                     "swiss-ai/Apertus-v1.5-8B-thinking", "swiss-ai/Apertus-v1.5-8B")
+_MODEL_SWITCH = {"tried": False, "model": None}
+_MODEL_SWITCH_LOCK = threading.Lock()
+
+
+def pick_model(ids: List[str], current: str) -> Optional[str]:
+    """The best Apertus v1.5 model among the endpoint's model ids (preference order, then any v1.5), or None."""
+    by_lower = {i.lower(): i for i in ids if isinstance(i, str)}
+    for name in (current,) + _MODEL_PREFERENCE:
+        if name.lower() in by_lower:
+            return by_lower[name.lower()]
+    v15 = sorted(i for i in by_lower.values() if "apertus-v1.5" in i.lower())
+    return v15[0] if v15 else None
+
 
 class NLIOutput(BaseModel):
     label: int = Field(..., description="0 = Entailment, 1 = Neutral, 2 = Contradiction")
@@ -302,6 +318,12 @@ class ApertusClient:
             try:
                 return self._request_completion(**kwargs), None
             except Exception as e:
+                status = getattr(e, "status_code", None)
+                # CSCS answers an unknown model with an empty 403, like a refused key: after the quick 401/403 retries,
+                # check the model list (a listed model or an unreadable list leaves the error as it is)
+                if ((self._unknown_model(e) or (status in (401, 403) and attempt >= self._retry_limit(e)))
+                        and self._switch_model(kwargs)):
+                    continue  # same request with a model the endpoint serves (not counted as a retry)
                 delay = min(30.0, 2.0 * 2 ** attempt) * random.uniform(0.5, 1.0)
                 if attempt >= self._retry_limit(e) or time.time() - start + delay > config.LLM_RETRY_BUDGET_S:
                     logger.error("Apertus API failed after %s attempt(s): %s", attempt + 1, type(e).__name__)
@@ -320,8 +342,39 @@ class ApertusClient:
                 logger.warning("Apertus API attempt %s failed: %s; retry in %.1fs", attempt, type(e).__name__, delay)
                 time.sleep(delay)
 
+    @staticmethod
+    def _unknown_model(error: Exception) -> bool:
+        status = getattr(error, "status_code", None)
+        return status == 404 or (status in (400, 422) and "model" in str(error).lower())
+
+    def _switch_model(self, kwargs: Dict[str, Any]) -> bool:
+        """
+        The endpoint refused the model: read its /models list once per run and switch every later request to the best
+        Apertus v1.5 model it serves. True if the request should be sent again with a different model.
+        """
+        with _MODEL_SWITCH_LOCK:
+            if not _MODEL_SWITCH["tried"]:
+                _MODEL_SWITCH["tried"] = True
+                try:
+                    listed = [m.get("id") for m in (self.client.get("/models") or {}).get("data", [])]
+                except Exception as exc:
+                    logger.error("Model %s refused and /models not readable (%s)", kwargs.get("model"), type(exc).__name__)
+                    listed = []
+                chosen = pick_model(listed, kwargs.get("model") or self.model_name)
+                if chosen and chosen != kwargs.get("model"):
+                    _MODEL_SWITCH["model"] = chosen
+                    logger.warning("Model %s not served by the endpoint; using %s", kwargs.get("model"), chosen)
+            chosen = _MODEL_SWITCH["model"]
+        if chosen and chosen != kwargs.get("model"):
+            kwargs["model"] = chosen
+            self.model_name = chosen
+            return True
+        return False
+
     def _request_completion(self, **kwargs):
         """One remote attempt; LLM_CLOCK counts it as time with a request in flight (backoff stays outside)."""
+        if _MODEL_SWITCH["model"]:
+            kwargs["model"] = _MODEL_SWITCH["model"]
         with LLM_CLOCK:
             response = self.client.chat.completions.create(**kwargs)
         # 'length' is not an error here: a capped answer is still parsed (the label comes first), and repeating the
@@ -367,6 +420,7 @@ class ApertusClient:
         claim_language: Optional[str] = None,
         passages: Optional[List[str]] = None,
         task_a: bool = False,
+        label_only: bool = False,
     ) -> NLIOutput:
         """
         Evaluate whether the booklet context entails, contradicts, or is neutral towards the claim.
@@ -433,6 +487,18 @@ class ApertusClient:
                 "The context is a list of numbered passages [P1], [P2], ... and may be in a different "
                 "language (German, French, Italian) than the claim: compare meaning, not wording.\n",
             )
+
+        if label_only and passages is not None:
+            # B_LABEL_ONLY (task B, whose evidence is not scored): the same prompt asking for the label alone
+            system_prompt = system_prompt.replace(
+                "3. CONTINUOUS CONFIDENCE: Estimate fuzzy membership degrees [0.0 to 1.0] for:\n"
+                "   - p_entail: confidence of direct textual support\n"
+                "   - p_neutral: confidence of missing/unaddressed information\n"
+                "   - p_contra: confidence of factual, numerical, or logical contradiction\n\n", "\n").replace(
+                '{\n  "p_entail": <0.0 - 1.0>,\n  "p_neutral": <0.0 - 1.0>,\n  "p_contra": <0.0 - 1.0>,\n'
+                '  "label": <0, 1, or 2>,\n'
+                '  "evidence_ids": [<ids of the passages that justify the label, e.g. 2, 5; empty for 1>]\n}',
+                '{"label": <0, 1, or 2>}')
 
         if passages is not None and config.PROMPT_LEAN:
             system_prompt = self.LEAN_SYSTEM_PROMPT

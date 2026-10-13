@@ -1,0 +1,273 @@
+diff --git a/track_2a/.env.example b/track_2a/.env.example
+index 7b1a7c4..a497a1a 100644
+--- a/track_2a/.env.example
++++ b/track_2a/.env.example
+@@ -19,6 +19,8 @@ PAGE_MAX_CHARS_TAIL=0 # E11 experiment: window for context pages after the first
+ PAGE_FULL_RANKS=4
+ PART_CONTEXT=true          # E12 (adopted): task A context = the booklet part the claim names (contents page)
+ PART_CONTEXT_CHARS=6000
++QUICK_PARTS=true           # unparsed booklets: read the needed pages first (same output, less waiting)
++B_LABEL_ONLY=false         # experiment: task B answers with the label only
+ PROMPT_LEAN=false          # experiment: shorter system prompt, same rules and schema
+ SPEAKER_BOOST=2       # always include the named side's 2 best argument pages (0 = off)
+ NLI_WORKERS=4         # cases processed in parallel by the batch CLI (NLI_BATCH_WORKERS works too)
+diff --git a/track_2a/src/apertus_client.py b/track_2a/src/apertus_client.py
+index 24af26d..b8f0744 100644
+--- a/track_2a/src/apertus_client.py
++++ b/track_2a/src/apertus_client.py
+@@ -367,6 +367,7 @@ class ApertusClient:
+         claim_language: Optional[str] = None,
+         passages: Optional[List[str]] = None,
+         task_a: bool = False,
++        label_only: bool = False,
+     ) -> NLIOutput:
+         """
+         Evaluate whether the booklet context entails, contradicts, or is neutral towards the claim.
+@@ -434,6 +435,18 @@ class ApertusClient:
+                 "language (German, French, Italian) than the claim: compare meaning, not wording.\n",
+             )
+ 
++        if label_only and passages is not None:
++            # B_LABEL_ONLY (task B, whose evidence is not scored): the same prompt asking for the label alone
++            system_prompt = system_prompt.replace(
++                "3. CONTINUOUS CONFIDENCE: Estimate fuzzy membership degrees [0.0 to 1.0] for:\n"
++                "   - p_entail: confidence of direct textual support\n"
++                "   - p_neutral: confidence of missing/unaddressed information\n"
++                "   - p_contra: confidence of factual, numerical, or logical contradiction\n\n", "\n").replace(
++                '{\n  "p_entail": <0.0 - 1.0>,\n  "p_neutral": <0.0 - 1.0>,\n  "p_contra": <0.0 - 1.0>,\n'
++                '  "label": <0, 1, or 2>,\n'
++                '  "evidence_ids": [<ids of the passages that justify the label, e.g. 2, 5; empty for 1>]\n}',
++                '{"label": <0, 1, or 2>}')
++
+         if passages is not None and config.PROMPT_LEAN:
+             system_prompt = self.LEAN_SYSTEM_PROMPT
+ 
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index 24f915a..1c77366 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -70,6 +70,11 @@ PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
+ # regular retrieval.
+ PART_CONTEXT = os.getenv("PART_CONTEXT", "true").lower() in ("true", "1", "yes")
+ PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
++# Processing time: a booklet that is not parsed yet is read page by page for the first cases' parts (contents page,
++# headings, the part's pages; src/quick_booklet.py), the same text and evidence, while the full parse goes on
++QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")
++# Experiment (task B): ask for the label only, without confidences and passage ids (task B evidence is not scored)
++B_LABEL_ONLY = os.getenv("B_LABEL_ONLY", "false").lower() in ("true", "1", "yes")
+ # Experiment (both tasks, 'ids' mode): the system prompt's rules in fewer words (ApertusClient.LEAN_SYSTEM_PROMPT)
+ PROMPT_LEAN = os.getenv("PROMPT_LEAN", "false").lower() in ("true", "1", "yes")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index 96c18a9..bed021b 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -308,6 +308,14 @@ class ClaimVerificationEngine:
+                 _GLOBAL_BOOKLET_CACHE[key] = {**parsed, "retriever": PassageRetriever(parsed["paragraphs"])}
+         return _GLOBAL_BOOKLET_CACHE[key]
+ 
++    def _ready_booklet_data(self, pdf_path: Union[str, Path]) -> Optional[Dict[str, Any]]:
++        """The parsed booklet if it is in memory or in the parse cache on disk (cheap to load), else None (no waiting)."""
++        if not config.CACHE_SINGLE_FLIGHT:
++            data = _GLOBAL_BOOKLET_CACHE.get(str(Path(pdf_path).resolve()))
++            if data is not None:
++                return data
++        return self._get_booklet_data(pdf_path) if is_parse_cached(pdf_path) else None
++
+     def _booklet_parts(self, booklet_data: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+         """Page ranges of the booklet's votes and parts from its contents page (PART_CONTEXT), computed once."""
+         if "section_parts" not in booklet_data:
+@@ -328,8 +336,21 @@ class ClaimVerificationEngine:
+             booklet_data["section_parts"] = parts
+         return booklet_data["section_parts"]
+ 
+-    def _part_passages(self, booklet_data: Dict[str, Any], claim: str, vote: Optional[str],
+-                         claim_language: Optional[str], booklet_language: Optional[str]):
++    def _quick_parts(self, quick) -> Optional[List[Dict[str, Any]]]:
++        """_booklet_parts for a booklet read page by page (QUICK_PARTS): PyMuPDF contents, speakers per vote on demand."""
++        if "parts" not in quick.parts_cache:
++            from src import part_context
++            from src.quick_booklet import SourceTexts
++            try:
++                parts = part_context.booklet_parts(SourceTexts(quick), quick.speakers)
++            except Exception as exc:
++                print(f"[warning] contents page not readable ({type(exc).__name__})", file=sys.stderr)
++                parts = None
++            quick.parts_cache["parts"] = parts
++        return quick.parts_cache["parts"]
++
++    def _part_passages(self, booklet_data: Optional[Dict[str, Any]], claim: str, vote: Optional[str],
++                       claim_language: Optional[str], booklet_language: Optional[str], quick=None):
+         """
+         PART_CONTEXT: the pages of the part the claim names, of the case's vote, in reading order, at most
+         PART_CONTEXT_CHARS characters. A part over the budget keeps its best-matching pages (BM25 with the claim, its
+@@ -337,14 +358,21 @@ class ClaimVerificationEngine:
+         Returns (passages, translation token usage) or None when no part is found for the claim.
+         """
+         from src import part_context
+-        found = part_context.part_pages(claim, vote, self._booklet_parts(booklet_data))
++        if quick is None:
++            parts = self._booklet_parts(booklet_data)
++            by_page = {}
++            for p in booklet_data["paragraphs"]:
++                by_page.setdefault(p["page_number"], p)
++            passage = by_page.get
++            lead_text = lambda: " ".join(p["text"] for p in booklet_data["pages"][:3])  # noqa: E731
++        else:  # booklet not parsed yet: the same passages, read page by page (src/quick_booklet.py)
++            parts, passage = self._quick_parts(quick), quick.passage
++            lead_text = lambda: " ".join(quick.first_texts(3))  # noqa: E731
++        found = part_context.part_pages(claim, vote, parts)
+         if not found:
+             return None
+         part, pages = found
+-        by_page = {}
+-        for p in booklet_data["paragraphs"]:
+-            by_page.setdefault(p["page_number"], p)
+-        candidates = [by_page[n] for n in pages if n in by_page and by_page[n]["text"].strip()]
++        candidates = [c for c in (passage(n) for n in pages) if c and c["text"].strip()]
+         if not candidates:
+             return None
+         label = _PART_LABELS[part]
+@@ -352,7 +380,7 @@ class ClaimVerificationEngine:
+         if sum(len(p["text"]) for p in candidates) > budget:
+             variants = None
+             if config.RETRIEVAL_QUERY_MODE != "original":
+-                source_language = booklet_language or guess_language(" ".join(p["text"] for p in booklet_data["pages"][:3]))
++                source_language = booklet_language or guess_language(lead_text())
+                 language = claim_language or guess_language(claim)
+                 if language != source_language:
+                     translated, usage, _ = self._translate_query(claim, language, source_language)
+@@ -409,8 +437,16 @@ class ClaimVerificationEngine:
+         if config.EVIDENCE_POLICY == "legacy" or result.strategy == "direct_reference" or result.error:
+             return result
+         from src.evidence import ParsedSourcePages, SourcePages, construct_evidence
+-        stored = self._get_booklet_data(result.booklet_path).get("source_pages")
+-        if stored:
++        ready = self._ready_booklet_data(result.booklet_path)
++        if ready is None and config.QUICK_PARTS:  # booklet still being parsed: its pages one by one
++            from src import quick_booklet
++            from src.quick_booklet import QuickSourcePages
++            stored, pages = None, QuickSourcePages(quick_booklet.booklet(result.booklet_path))
++        else:
++            stored = (ready or self._get_booklet_data(result.booklet_path)).get("source_pages")
++        if ready is None and config.QUICK_PARTS:
++            pass  # pages: QuickSourcePages above
++        elif stored:
+             pages = ParsedSourcePages(stored)  # read with the parse: no PDF access here
+         else:
+             with self._source_pages_lock:
+@@ -447,14 +483,26 @@ class ClaimVerificationEngine:
+         Supports ADVANCED TASK from Hack Apertus: accepts optional 'vote' title to scope proposal.
+         """
+         strat = strategy or self.strategy
+-        booklet_data = self._get_booklet_data(booklet_pdf)
+         retrieval_claim, query_variants = claim, None
+         translation_usage, query_metadata = (0, 0), {}
+         part_ctx = None
+-        if config.PART_CONTEXT and strat == "hybrid" and self.prompt_mode in ("ids", "compact"):
+-            part_ctx = self._part_passages(booklet_data, claim, vote, claim_language, booklet_language)
+-            if part_ctx:
+-                translation_usage = part_ctx[1]
++        use_parts = config.PART_CONTEXT and strat == "hybrid" and self.prompt_mode in ("ids", "compact")
++        booklet_data = self._ready_booklet_data(booklet_pdf)
++        if booklet_data is None and use_parts and config.QUICK_PARTS:
++            # not parsed yet: the part's pages are read on their own while the full parse goes on in the background
++            from src import quick_booklet
++            try:
++                part_ctx = self._part_passages(None, claim, vote, claim_language, booklet_language,
++                                               quick=quick_booklet.booklet(booklet_pdf))
++            except Exception as exc:  # anything unexpected: the regular path below
++                print(f"[warning] page-by-page reading failed ({type(exc).__name__}): full parse", file=sys.stderr)
++                part_ctx = None
++        if part_ctx is None:
++            booklet_data = booklet_data or self._get_booklet_data(booklet_pdf)
++            if use_parts:
++                part_ctx = self._part_passages(booklet_data, claim, vote, claim_language, booklet_language)
++        if part_ctx:
++            translation_usage = part_ctx[1]
+         # Query translation only applies to hybrid ids/compact retrieval with an unchanged NLI claim; other
+         # strategies (now that 'union' is the default) simply retrieve with the original claim
+         if part_ctx:
+@@ -779,6 +827,8 @@ class ClaimVerificationEngine:
+             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
+             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
+                 call["task_a"] = True
++            if not task_a and config.B_LABEL_ONLY:
++                call["label_only"] = True
+             out = self.client.infer(**call)
+         else:
+             out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote)
+diff --git a/track_2a/src/part_context.py b/track_2a/src/part_context.py
+index d6a2ab1..caa4705 100644
+--- a/track_2a/src/part_context.py
++++ b/track_2a/src/part_context.py
+@@ -116,10 +116,11 @@ def booklet_parts(page_texts: Dict[int, str], speaker_of: Dict[int, Optional[str
+     Page ranges of every vote's parts from the contents page, or None if no consistent contents page is found.
+     `page_texts`: 1-based page -> text; `speaker_of`: page -> 'committee' / 'federal_council' / None (parser labels).
+     """
+-    n_pages = max(page_texts) if page_texts else 0
++    # a page-by-page reader (src/quick_booklet.py) knows its last page without reading every page
++    n_pages = page_texts.last_page() if hasattr(page_texts, "last_page") else (max(page_texts) if page_texts else 0)
+     # The contents may continue on a second page (five votes on 27 September 2020)
+     votes, seen = [], set()
+-    for p in sorted(p for p in page_texts if p <= 6):
++    for p in [p for p in range(1, 7) if p in page_texts]:
+         for v in parse_toc(page_texts[p]):
+             key = tuple(sorted(first for first, _ in v["parts"].values()))
+             if key not in seen:  # the same contents can be printed twice (cover flap and inside page)
+@@ -134,6 +135,8 @@ def booklet_parts(page_texts: Dict[int, str], speaker_of: Dict[int, Optional[str
+             score = sum(bool(c) for c in checks) / max(len(checks), 1)
+             if best is None or score > best[0]:
+                 best = (score, offset)
++            if score == 1.0:  # no later offset can score higher (ties keep the earlier one): skip reading their pages
++                break
+         if best[0] < 0.5:
+             return None
+         offset = best[1]
+@@ -149,22 +152,27 @@ def booklet_parts(page_texts: Dict[int, str], speaker_of: Dict[int, Optional[str
+                     later = [s for s in starts if s > first]
+                     last = (later[0] - 1) if later else min(n_pages, first + 5)
+                 ranges[part] = list(range(first, min(last, n_pages) + 1))
+-            if ARGUMENTS in ranges:
+-                pages = ranges[ARGUMENTS]
+-                committee = [p for p in pages if speaker_of.get(p) == COMMITTEE]
+-                council = [p for p in pages if speaker_of.get(p) == FEDERAL_COUNCIL]
+-                if not committee or not council:  # labels missing: the committee's double page comes first
+-                    half = (len(pages) + 1) // 2
+-                    committee, council = committee or pages[:half], council or pages[half:]
+-                ranges[COMMITTEE], ranges[FEDERAL_COUNCIL] = committee, council
++            if ARGUMENTS in ranges and not callable(speaker_of):
++                ranges[COMMITTEE], ranges[FEDERAL_COUNCIL] = split_arguments(ranges[ARGUMENTS], speaker_of)
+             # The contents abbreviate some titles; the first lines of the summary and detail pages repeat them in full
+             names = [v["title"]] + [" ".join(_toc_lines(page_texts.get(ranges[p][0], ""))[:8])
+                                     for p in (SUMMARY, DETAIL) if ranges.get(p)]
+-            result.append({"title": v["title"], "names": names, "parts": ranges})
++            result.append({"title": v["title"], "names": names, "parts": ranges,
++                           "speakers": speaker_of if callable(speaker_of) else None})
+         return result
+     return None
+ 
+ 
++def split_arguments(pages: List[int], speaker_of: Dict[int, Optional[str]]) -> Tuple[List[int], List[int]]:
++    """(committee pages, Federal Council pages) of an arguments range, by the parser's speaker labels."""
++    committee = [p for p in pages if speaker_of.get(p) == COMMITTEE]
++    council = [p for p in pages if speaker_of.get(p) == FEDERAL_COUNCIL]
++    if not committee or not council:  # labels missing: the committee's double page comes first
++        half = (len(pages) + 1) // 2
++        committee, council = committee or pages[:half], council or pages[half:]
++    return committee, council
++
++
+ def _words(text: str) -> set:
+     return {w for w in _fold(text).split() if len(w) >= 3 and not w.isdigit()}
+ 
+@@ -193,5 +201,9 @@ def part_pages(claim: str, vote: Optional[str], parts: Optional[List[Dict[str, A
+     v = match_vote(parts, vote)
+     if v is None:
+         return None
++    if part in (COMMITTEE, FEDERAL_COUNCIL) and part not in v["parts"] and ARGUMENTS in v["parts"] and v.get("speakers"):
++        # speaker labels given as a function (booklets read page by page): split this vote's arguments only
++        args = v["parts"][ARGUMENTS]
++        v["parts"][COMMITTEE], v["parts"][FEDERAL_COUNCIL] = split_arguments(args, v["speakers"](args))
+     pages = v["parts"].get(part)
+     return (part, pages) if pages else None

@@ -116,10 +116,11 @@ def booklet_parts(page_texts: Dict[int, str], speaker_of: Dict[int, Optional[str
     Page ranges of every vote's parts from the contents page, or None if no consistent contents page is found.
     `page_texts`: 1-based page -> text; `speaker_of`: page -> 'committee' / 'federal_council' / None (parser labels).
     """
-    n_pages = max(page_texts) if page_texts else 0
+    # a page-by-page reader (src/quick_booklet.py) knows its last page without reading every page
+    n_pages = page_texts.last_page() if hasattr(page_texts, "last_page") else (max(page_texts) if page_texts else 0)
     # The contents may continue on a second page (five votes on 27 September 2020)
     votes, seen = [], set()
-    for p in sorted(p for p in page_texts if p <= 6):
+    for p in [p for p in range(1, 7) if p in page_texts]:
         for v in parse_toc(page_texts[p]):
             key = tuple(sorted(first for first, _ in v["parts"].values()))
             if key not in seen:  # the same contents can be printed twice (cover flap and inside page)
@@ -134,6 +135,8 @@ def booklet_parts(page_texts: Dict[int, str], speaker_of: Dict[int, Optional[str
             score = sum(bool(c) for c in checks) / max(len(checks), 1)
             if best is None or score > best[0]:
                 best = (score, offset)
+            if score == 1.0:  # no later offset can score higher (ties keep the earlier one): skip reading their pages
+                break
         if best[0] < 0.5:
             return None
         offset = best[1]
@@ -149,20 +152,25 @@ def booklet_parts(page_texts: Dict[int, str], speaker_of: Dict[int, Optional[str
                     later = [s for s in starts if s > first]
                     last = (later[0] - 1) if later else min(n_pages, first + 5)
                 ranges[part] = list(range(first, min(last, n_pages) + 1))
-            if ARGUMENTS in ranges:
-                pages = ranges[ARGUMENTS]
-                committee = [p for p in pages if speaker_of.get(p) == COMMITTEE]
-                council = [p for p in pages if speaker_of.get(p) == FEDERAL_COUNCIL]
-                if not committee or not council:  # labels missing: the committee's double page comes first
-                    half = (len(pages) + 1) // 2
-                    committee, council = committee or pages[:half], council or pages[half:]
-                ranges[COMMITTEE], ranges[FEDERAL_COUNCIL] = committee, council
+            if ARGUMENTS in ranges and not callable(speaker_of):
+                ranges[COMMITTEE], ranges[FEDERAL_COUNCIL] = split_arguments(ranges[ARGUMENTS], speaker_of)
             # The contents abbreviate some titles; the first lines of the summary and detail pages repeat them in full
             names = [v["title"]] + [" ".join(_toc_lines(page_texts.get(ranges[p][0], ""))[:8])
                                     for p in (SUMMARY, DETAIL) if ranges.get(p)]
-            result.append({"title": v["title"], "names": names, "parts": ranges})
+            result.append({"title": v["title"], "names": names, "parts": ranges,
+                           "speakers": speaker_of if callable(speaker_of) else None})
         return result
     return None
+
+
+def split_arguments(pages: List[int], speaker_of: Dict[int, Optional[str]]) -> Tuple[List[int], List[int]]:
+    """(committee pages, Federal Council pages) of an arguments range, by the parser's speaker labels."""
+    committee = [p for p in pages if speaker_of.get(p) == COMMITTEE]
+    council = [p for p in pages if speaker_of.get(p) == FEDERAL_COUNCIL]
+    if not committee or not council:  # labels missing: the committee's double page comes first
+        half = (len(pages) + 1) // 2
+        committee, council = committee or pages[:half], council or pages[half:]
+    return committee, council
 
 
 def _words(text: str) -> set:
@@ -193,5 +201,9 @@ def part_pages(claim: str, vote: Optional[str], parts: Optional[List[Dict[str, A
     v = match_vote(parts, vote)
     if v is None:
         return None
+    if part in (COMMITTEE, FEDERAL_COUNCIL) and part not in v["parts"] and ARGUMENTS in v["parts"] and v.get("speakers"):
+        # speaker labels given as a function (booklets read page by page): split this vote's arguments only
+        args = v["parts"][ARGUMENTS]
+        v["parts"][COMMITTEE], v["parts"][FEDERAL_COUNCIL] = split_arguments(args, v["speakers"](args))
     pages = v["parts"].get(part)
     return (part, pages) if pages else None

@@ -616,3 +616,38 @@ smaller budget hurts everywhere, so a better selection inside long voting texts 
 container with `--network none --read-only`; jury-style run on 27 mixed cases against the real endpoint: exit 0, 27/27
 records, every task A label identical to the E12 runs (the sample happens to contain 3 of E12's 29 broken cases, so its
 15-case F1 is 0.77; both minimum thresholds pass), 1,808 input tokens per case.
+
+## 15. E15 / E16 — fewer task B tokens (2026-10-13, both rejected)
+
+The measured competitor (section 16) answers task B with ~824 tokens per case against our 1,794, so task B tokens were
+the largest open lever. Bar: fewer tokens **and no loss of macro-F1** (all 1,488 task B cases, against E2).
+
+| Task B, 1,488 cases | E2 (submission) | E15: references ≤ 3,000 chars | E16: label-only answer |
+|---|---:|---:|---:|
+| Macro-F1 | **0.9845** | 0.9805 | 0.8705 |
+| Wrong labels (fixed / broken) | 23 | 29 (7 / 13) | 188 (12 / 177; 172 of them N→C) |
+| Input / output tokens per case | 1,732 / 62 | 1,375 / 70 | 1,578 / 15 |
+
+- E15 cuts long references to their best-matching passages at 3,000 instead of 6,000 characters: −21 % input tokens,
+  but −0.004 macro-F1. Rejected (F1 loss).
+- E16 (`B_LABEL_ONLY`, off) keeps the prompt and drops only the confidences and passage ids from the answer schema.
+  Without having to state `p_neutral`, Apertus labels unrelated references as contradiction: the confidences act as a
+  small reasoning scaffold, not just as output. Rejected.
+- With E13 (shorter rules) this closes the task B token question: with Apertus 70B the full prompt, the confidences
+  and 6,000-character references are all needed for the 0.984.
+
+## 16. Processing time and robustness (2026-10-13)
+
+- **Page-by-page reading of new booklets (`QUICK_PARTS=true`, `src/quick_booklet.py`).** A booklet that is not parsed
+  yet costs 4.5–7.7 s to parse in full, and the first one is not hidden behind any request (local time is scored). With
+  part selection a case needs only the contents (PyMuPDF text, fast), the headings and the 2–6 pages of its part (pypdf,
+  the model's text). Those are read on their own while the full parse runs on in the background; later cases and
+  claims without a part use the full parse. **Equality check** (no API) over all 1,488 dataset and 90 holdout task A
+  cases, full parse against page-by-page reading: 1,566 identical in passages, page texts, part labels and evidence
+  source pages, 0 different, 12 without a part on both paths. A booklet once opened serves further cases in 2 ms (median).
+- **Lazy imports** in the CLI (`rich`, `hf_dataset`): not needed by the official batch run.
+- **Model fallback.** The endpoint answers a model it does not serve with an error (CSCS: an empty HTTP 403, like a
+  refused key); without a fallback every case would come back neutral and the submission would fall below the
+  thresholds. Now the client reads `/models` once and switches to the best Apertus v1.5 model listed (70B-thinking,
+  70B, 8B-thinking, 8B); a listed model or an unreadable list leaves the error as it is. `MODEL` is accepted as an alias
+  of `LLM_NAME`. Checked live: a wrong model name switches to Apertus-v1.5-70B-thinking and answers normally.

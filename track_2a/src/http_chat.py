@@ -67,6 +67,25 @@ class HTTPChatClient:
             conn.close()
         self._local.conn = None
 
+    def get(self, path: str, timeout: float = 20.0) -> Any:
+        """GET (e.g. /models) on a fresh connection; raises APIError on failure."""
+        cls = http.client.HTTPSConnection if self._https else http.client.HTTPConnection
+        conn = cls(self._host, self._port, timeout=timeout)
+        try:
+            conn.request("GET", self._prefix + path, headers=self._headers)
+            resp = conn.getresponse()
+            data = resp.read()
+        except (OSError, http.client.HTTPException) as e:
+            raise APIError(f"{type(e).__name__}: {e}") from e
+        finally:
+            conn.close()
+        if resp.status >= 400:
+            raise APIError(f"HTTP {resp.status}", status_code=resp.status)
+        try:
+            return json.loads(data)
+        except ValueError as e:
+            raise APIError("invalid JSON response", status_code=resp.status) from e
+
     def post(self, path: str, body: dict, timeout: float) -> Any:
         payload = json.dumps(body).encode("utf-8")
         for attempt in (1, 2):  # a kept-alive connection the server has closed fails once: reconnect and resend

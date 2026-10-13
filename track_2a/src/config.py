@@ -23,7 +23,9 @@ else:
 
 # Apertus / LLM Endpoint Config. The official evaluation injects BASE_URL (its token-counting proxy) and API_KEY;
 # they take precedence over the older LLM_* names, so no call can bypass the proxy
-LLM_NAME = os.getenv("LLM_NAME", "swiss-ai/Apertus-v1.5-70B-thinking")
+# MODEL is accepted as an alias (some setups name the model that way); if the endpoint does not serve this model, the
+# client switches once to the best Apertus v1.5 model it lists (src/apertus_client.py, _switch_model)
+LLM_NAME = os.getenv("LLM_NAME") or os.getenv("MODEL") or "swiss-ai/Apertus-v1.5-70B-thinking"
 def _endpoint_setting(official, legacy):
     # Any runtime setting outranks a .env value, including across alias names.
     for name in (official, legacy):
@@ -70,6 +72,11 @@ PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
 # regular retrieval.
 PART_CONTEXT = os.getenv("PART_CONTEXT", "true").lower() in ("true", "1", "yes")
 PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
+# Processing time: a booklet that is not parsed yet is read page by page for the first cases' parts (contents page,
+# headings, the part's pages; src/quick_booklet.py), the same text and evidence, while the full parse goes on
+QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")
+# Experiment (task B): ask for the label only, without confidences and passage ids (task B evidence is not scored)
+B_LABEL_ONLY = os.getenv("B_LABEL_ONLY", "false").lower() in ("true", "1", "yes")
 # Experiment (both tasks, 'ids' mode): the system prompt's rules in fewer words (ApertusClient.LEAN_SYSTEM_PROMPT)
 PROMPT_LEAN = os.getenv("PROMPT_LEAN", "false").lower() in ("true", "1", "yes")
 
