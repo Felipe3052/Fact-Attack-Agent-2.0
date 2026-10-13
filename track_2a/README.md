@@ -134,7 +134,7 @@ make run      # builds the image (downloads + pre-parses the booklets), benchmar
 make test     # unit tests, no API calls
 ```
 
-`NLI_DATASET=data/demo_dataset.jsonl` selects the 28-pair demo set, `NLI_WORKERS` the parallel requests (default 4).
+`NLI_WORKERS` sets the parallel requests (default 4); the benchmark downloads the OST dataset when the run starts.
 The report is printed to the console; the run's JSON (metrics, run settings incl. the image's git commit, and
 per-sample predictions) is written to `track_2a/results/` on the host.
 
