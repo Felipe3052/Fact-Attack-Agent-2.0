@@ -567,3 +567,52 @@ Confusion (rows gold, columns prediction, order E, C, N): baseline `[[441,34,20]
   37 broken, input tokens 1,750 → 1,636 (−6.5 %). **Rejected:** the model needs the whole part.
 - **Adopted: E12** (`PART_CONTEXT=true`, `PART_CONTEXT_CHARS=6000`) is now the default in `src/config.py` and both
   `.env.example` files, so the submission image runs it. The full system prompt stays (E13).
+
+## 14. Before / after in detail: submission of 13 October vs. part selection (2026-10-13)
+
+Before = `main` at the merge of PR #10 (E7/E8, 8 retrieved pages; run `E7_compact`); after = E12 (`E12_part_context`).
+Task B is unchanged (E2, run `E2_reference_6000`). All numbers from the official scorer on the official CLI's output.
+
+| Task A, all 1,488 pairs | Before | After |
+|---|---:|---:|
+| Macro-F1 (de-duplicated / cross-language) | 0.949 (0.953 / 0.949) | **0.968** (0.965 / 0.971) |
+| F1 entailment / neutral / contradiction | 0.939 / 0.969 / 0.940 | 0.975 / 0.972 / 0.956 |
+| Evidence Hit@5 | 0.881 (872 / 990) | **0.975** (965 / 990) |
+| Wrong labels | 75 | **48** |
+| Input tokens mean / median / p95 | 3,915 / 3,848 / 5,223 | **1,750** / 1,580 / 2,531 |
+| Output tokens | 60 | 59 |
+| Apertus time mean / p95 | 1.6 s / 2.8 s | 1.0 s / 1.2 s |
+| Time outside model calls (CLI estimate) | 2.5 ms | 1.7 ms |
+
+| Wrong labels by claim type (task A) | Before | After |
+|---|---:|---:|
+| Consequences of a yes (240) | 31 | 12 |
+| Committee (275) | 17 | 3 |
+| Summary (299) | 12 | 10 |
+| Federal Council (438) | 3 | 1 |
+| Voting text (214) | 10 | **22** |
+
+The voting-text claims are the new weak spot: long legal texts exceed the 6,000-character budget (E14 shows that a
+smaller budget hurts everywhere, so a better selection inside long voting texts is the next step, not a cut).
+
+| Task A by fold (F1 / Hit@5) | Before | After |
+|---|---:|---:|
+| 0 | 0.971 / 0.908 | 0.975 / 0.967 |
+| 1 | 0.950 / 0.879 | 0.954 / 0.953 |
+| 2 | 0.980 / 0.904 | 0.973 / 0.973 |
+| 3 | 0.919 / 0.874 | 0.978 / 0.995 |
+| 4 | 0.919 / 0.838 | 0.958 / 0.985 |
+
+| Task B (unchanged), all 1,488 pairs | B0 (earlier submission) | **E2 (submission)** | E13 lean prompt (rejected) |
+|---|---:|---:|---:|
+| Macro-F1 (cross-language) | 0.981 (0.979) | **0.984** (0.984) | 0.940 (0.950) |
+| F1 entailment / neutral / contradiction | 0.989 / 0.983 / 0.972 | 0.987 / 0.990 / 0.977 | 0.939 / 0.963 / 0.916 |
+| Wrong labels (C→N, E→C, C→E, N→C) | 28 (11, 5, 6, 6) | 23 (9, 7, 6, 1) | 91 (8, 52, 3, 26) |
+| Input tokens mean / p95 | 2,482 / 5,023 | 1,732 / 2,349 | 1,515 / 2,130 |
+| Folds | 0.976–0.985 | 0.968–0.990 | 0.894–0.965 |
+| Holdout | 0.955 | 0.966 | – |
+
+**Image check** (`fact-attack:part`, built from this branch): 60/60 booklets pre-parsed, 160 tests pass in the
+container with `--network none --read-only`; jury-style run on 27 mixed cases against the real endpoint: exit 0, 27/27
+records, every task A label identical to the E12 runs (the sample happens to contain 3 of E12's 29 broken cases, so its
+15-case F1 is 0.77; both minimum thresholds pass), 1,808 input tokens per case.
