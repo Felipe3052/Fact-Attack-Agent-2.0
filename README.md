@@ -37,8 +37,9 @@ are saved in [`track_2a/results/generalization/`](track_2a/results/generalizatio
   processing time outside the model calls stays in the millisecond range per case.
 - **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
   vote, which are not part of the dataset. Written before the system ever ran on them, labels checked by a second
-  person (90/90 agree). Used only at the end: to confirm E2 and to check E8 and the part selection (E12) for regressions
-  (6 → 6 → 4 wrong advanced labels). Small (± ~0.05 macro-F1), but not used to design anything.
+  person (90/90 agree). Used only at the end: to confirm E2 and the task B changes (E17a, E19c) and to check E8 and the
+  part selection (E12) for regressions (6 → 6 → 4 wrong advanced labels). It is small (± ~0.05 macro-F1) and, for task
+  B, covers only two votes in three languages (about 30 distinct claims).
 - **Whole dataset:** all of it has been used for design decisions by now, including the earlier 5-date test split
   (where the submission before E8 scored A 0.942 / Hit@5 0.833, B 0.982); it shows how stable the results are across voting
   dates, not how they generalise. Running the same configuration twice changes 3 of 1,488 labels.
@@ -58,11 +59,12 @@ measurements on the same cases ([experiment log](track_2a/docs/experiments.md#me
   (macro-F1 0.981 → 0.984), −13 % on the holdout (0.955 → 0.966). Three other ideas were measured and dropped: fewer
   legal-text pages (−0.005 F1), narrower page windows (−9 % tokens but −0.008 F1), evidence blocks ranked with the
   translated claim (+0.004 Hit@5, inconsistent).
-- **Task B cascade** (E17–E19): a short label-only prompt answers first on at most 2,000 reference characters; below a
-  label probability of 0.98 (~10 % of the cases) the full prompt is asked again. All pairs: macro-F1 0.987 → 0.982,
-  input tokens 1,640 → 865 (−48 %); on the holdout (two votes) 3 → 4 wrong labels at −22 % tokens. The token score is
-  relative to the other teams, so its net effect is estimated, not measured; `B_PROMPT=` restores the previous
-  behaviour (technical report 2.4).
+- **Task B: tiered budget and cascade** (E17a, E19c): references up to 9,000 characters keep 3,000 (0.984 → 0.987,
+  1,732 → 1,640 input tokens). On top, a short label-only prompt answers first on at most 2,000 reference characters;
+  below a label probability of 0.98 (~10 % of the cases) the full prompt is asked again. All pairs: macro-F1 0.987 →
+  0.982, input tokens 1,640 → 865 (−48 %); on the holdout (two votes) 3 → 4 wrong labels at −21 % tokens. The token
+  score is relative to the other teams, so the net effect is estimated, not measured; `B_PROMPT=` restores the state
+  before the cascade (technical report 2.4).
 - **Four compact label rules in the task A prompt** (E7/E8): macro-F1 0.942 → 0.949, Hit@5 0.867 → 0.881 on all
   1,488 pairs (22 fixed / 11 broken) for +2.5 % tokens; neutral on the holdout. Rejected after measuring: section labels
   for navigation-bar pages (E5, noise), evidence blocks only (E6, gains only via the vote title in the gold passages),
@@ -108,7 +110,9 @@ Every number comes from a saved run in [`track_2a/results/`](track_2a/results/).
 ### What we learned about Apertus
 
 - **More context hurts:** the whole booklet (~60k tokens) scores 0.73, ten selected pages 0.93.
-- **Over-confident:** the label probability is ~1.0 for wrong answers too, so confidence thresholds cannot catch errors.
+- **Over-confident:** the label probability is ~1.0 for wrong answers too, so confidence thresholds cannot catch the
+  errors of the full prompt. The short task B call is the exception (84 % of its answers are saturated, its errors lie
+  in the rest), which is what the cascade uses.
 - **Sometimes self-contradictory:** in ~2 % of answers the label and the stated confidences disagree; the label is right
   3× as often, so we keep it (+0.008 F1 on test).
 - **Speaker attribution was mostly a retrieval problem:** committee claims failed 13 % of the time because the committee's
@@ -144,6 +148,9 @@ Details and every rejected idea: [experiment log](track_2a/docs/experiments.md).
           label 0/1/2 + verbatim evidence pages + tokens + inference time
 ```
 
+Since E12 the context of task A is the part of the vote the claim's opening names (located with the contents page);
+the retrieval of 8 pages above is the fallback for claims without such an opening (technical report 2.2).
+
 1. **Hybrid retrieval that works across languages.** The vote title is written in the booklet's language, so it
    anchors the right proposal even when the claim is in another language. Unlike a hard proposal filter it keeps
    the overview pages at the front of the booklet. Gold-section recall rose from 0.74 to 0.93.
@@ -155,9 +162,10 @@ Details and every rejected idea: [experiment log](track_2a/docs/experiments.md).
 4. **Speaker boost and decision rules.** If the claim names a side ("the committee argues …"), that side's two best
    argument pages are always in the context; this cut the error rate on committee claims from 13 % to 7 %. A Neutral label next to a
    confident other relation follows the confidences, otherwise Apertus' own label is kept.
-5. **Task B gets only the relevant part of a long reference.** The reference is split into passages; when it is longer
-   than 6,000 characters, its opening passage and the passages that best match the claim (BM25, with the claim's
-   translation for cross-lingual pairs) are sent, in document order, up to that budget.
+5. **Task B gets only the relevant part of a long reference, and a cheap first look.** The reference is split into
+   passages; its opening passage and the passages that best match the claim (BM25, with the claim's translation for
+   cross-lingual pairs) are kept in document order, up to 3,000 characters (6,000 above 9,000 characters). A short
+   label-only call sees at most 2,000 of them; when its label probability is below 0.98, the full prompt is asked.
 6. **Measured, not assumed.** Every design choice was tested on paired runs; ideas that did not help (a hard
    numerical override, label-only answers, small passages, full-booklet prompting, fewer or narrower pages) were
    dropped. See the [experiment log](track_2a/docs/experiments.md) and the
@@ -205,8 +213,10 @@ PROMPT_MODE=ids                         # 'ids' | 'json' | 'compact'
 RETRIEVAL_QUERY_MODE=union              # BM25 with the claim and its translation into the booklet language
 EVIDENCE_POLICY=raw_pages_and_blocks    # cited PyMuPDF pages + best-matching text blocks
 REFERENCE_MAX_CHARS=6000                # task B: longer references cut to the passages that match the claim
+REFERENCE_MID_CHARS=3000                # task B: references up to 9,000 characters keep this many
 B_PROMPT=topic                          # task B: short label-only first call, full prompt when unsure ("" = off)
 B_ESCALATE_BELOW=0.98                   # task B: label probability below which the full prompt is asked again
+B_SHORT_CHARS=2000                      # task B: reference characters the first call sees
 NLI_WORKERS=4                           # cases processed in parallel by the batch CLI
 ```
 

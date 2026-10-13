@@ -21,7 +21,7 @@ German, French and Italian.
 
 Josip's earlier comparison of retrieval and evidence variants (R2 and others, all 1,488 cases, k=12) is in the
 [optimization report](docs/competition_optimization_report.md). The measurements since then (reproducible decision
-runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E4) are in
+runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E22) are in
 [independent_experiments.md](docs/independent_experiments.md) with their predictions in
 [results/generalization/](results/generalization/).
 
@@ -64,6 +64,12 @@ label rules to the task A prompt only (task B is never affected). Evaluated in
 E7 on 1,488 cases against a fresh baseline: macro-F1 0.9419 → 0.9493 (95 % date-bootstrap interval −0.002 … +0.018,
 so not significant), Hit@5 858 → 872 of 990, +2.5 % input tokens; see `docs/independent_experiments.md`, section 7.
 With `A_COMPACT_PROMPT=false` every request is byte-identical to the previous submission baseline.
+
+`B_PROMPT=topic` (on by default, E18/E19c) is the task B cascade: a ~190-token label-only prompt that sees at most
+`B_SHORT_CHARS` characters of the reference answers first; when its label probability is below `B_ESCALATE_BELOW` the
+case is asked again with the full prompt (references up to 9,000 characters keep `REFERENCE_MID_CHARS`, E17a). All
+1,488 task B pairs: macro-F1 0.987 → 0.982, input tokens 1,640 → 865; holdout (two votes) 3 → 4 wrong labels of 90.
+`B_PROMPT=` (empty) restores the state before the cascade; see `docs/independent_experiments.md`, sections 17–18.
 
 `PART_CONTEXT` (on by default, E12) replaces the 8 retrieved pages by the part of the booklet the claim's opening names,
 located with the contents page (`src/part_context.py`); claims without such an opening, or booklets without a readable
@@ -147,7 +153,7 @@ track_2a/
 ├── technical_report.md       # Architecture, evaluation, findings, limitations
 ├── .env.example              # Every setting with its default (= what the submission image runs)
 ├── docs/experiments.md       # Every experiment with its numbers
-├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E4
+├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E22
 ├── docs/FactAttack_Technical_Report.pdf  # Submission PDF of the report (docs/build_report_pdf.py)
 ├── results/                  # Saved benchmark runs + summary.json
 │   └── generalization/       # Decision runs: predictions, official scores, fold/language/class reports
