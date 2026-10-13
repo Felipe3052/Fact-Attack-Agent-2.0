@@ -206,7 +206,8 @@ SUBMISSION_TASK_B_REQUESTS_SHA256 = "fe6bdd6bf7172e151b69f56db4cf65d898ba037ce31
 EVALUATED_COMPACT_PROMPT_SHA256 = "1d392f22b1eb19ee741f7a0fef1cd676c00ef05db480a811269abc8586d67adc"
 # Prompt-relevant settings pinned to the submission defaults, so a developer .env cannot change the fingerprints
 SUBMISSION_PROMPT_SETTINGS = {"THINKING": False, "PROMPT_SHORT": False, "IDS_REASON": False, "FEW_SHOT": False,
-                              "TRANSLATE_CLAIM": False, "SPEAKER_HINT": False, "REFERENCE_MAX_CHARS": 6000}
+                              "TRANSLATE_CLAIM": False, "SPEAKER_HINT": False, "REFERENCE_MAX_CHARS": 6000,
+                              "REFERENCE_MID_CHARS": 3000, "REFERENCE_LONG_CHARS": 9000}
 
 
 class TestCompactPromptSwitch(unittest.TestCase):

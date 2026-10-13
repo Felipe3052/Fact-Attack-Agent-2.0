@@ -1,0 +1,74 @@
+diff --git a/track_2a/.env.example b/track_2a/.env.example
+index a497a1a..bc6e7b0 100644
+--- a/track_2a/.env.example
++++ b/track_2a/.env.example
+@@ -48,6 +48,8 @@ SPEAKER_HINT=false
+ NUMERIC_OVERRIDE=false
+ LEGAL_TEXT_MAX_PAGES=0     # E1: at most n legal-text pages in the task A context (rejected)
+ REFERENCE_MAX_CHARS=6000   # E2 (adopted): task B, longer references cut to their best-matching chunks (0 = whole reference)
++REFERENCE_MID_CHARS=3000    # E17a (adopted): task B budget for references up to REFERENCE_LONG_CHARS (0 = off)
++REFERENCE_LONG_CHARS=9000
+ A_COMPACT_PROMPT=true      # E7 (adopted, E8): compact task A label rules, task A prompt only (+~97 input tokens/case);
+                            # false = previous baseline (docs/independent_experiments.md, sections 7-8)
+ 
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index 979e2ad..f033194 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -133,6 +133,11 @@ LEGAL_TEXT_MAX_PAGES = int(os.getenv("LEGAL_TEXT_MAX_PAGES", "0"))
+ # (0 = always the whole reference). Experiment E2: all 1,488 task B cases macro-F1 0.981 -> 0.984 at -30 % input
+ # tokens; untouched holdout (27 Sep 2026 booklets, 90 claims) 0.955 -> 0.966 at -13 %
+ REFERENCE_MAX_CHARS = int(os.getenv("REFERENCE_MAX_CHARS", "6000"))
++# Task B, tiered budget (experiment E17a, adopted: 1,488 cases macro-F1 0.9845 -> 0.9872, input tokens -5 %): a reference of at most REFERENCE_LONG_CHARS characters is cut
++# to REFERENCE_MID_CHARS instead of REFERENCE_MAX_CHARS (0 = one budget for every length). References above
++# REFERENCE_LONG_CHARS are almost all neutral claims whose cut lost F1 in E15, so they keep the larger budget.
++REFERENCE_MID_CHARS = int(os.getenv("REFERENCE_MID_CHARS", "3000"))
++REFERENCE_LONG_CHARS = int(os.getenv("REFERENCE_LONG_CHARS", "9000"))
+ # Speaker hint: tell the model which passages are the named side's own text
+ SPEAKER_HINT = os.getenv("SPEAKER_HINT", "false").lower() in ("true", "1", "yes")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index bed021b..c49543e 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -409,7 +409,14 @@ class ClaimVerificationEngine:
+         translated, prompt_tokens, completion_tokens, receipt = self._query_translator.get(claim, language, target_language)
+         return translated, (prompt_tokens, completion_tokens), receipt
+ 
+-    def _focus_reference(self, chunks: List[str], claim: str, claim_language: Optional[str]):
++    @staticmethod
++    def _reference_budget(length: int) -> int:
++        """Characters a reference of this length may keep (REFERENCE_MAX_CHARS, or REFERENCE_MID_CHARS up to REFERENCE_LONG_CHARS)."""
++        if config.REFERENCE_MID_CHARS and length <= config.REFERENCE_LONG_CHARS:
++            return config.REFERENCE_MID_CHARS
++        return config.REFERENCE_MAX_CHARS
++
++    def _focus_reference(self, chunks: List[str], claim: str, claim_language: Optional[str], budget: Optional[int] = None):
+         """
+         Task B, reference longer than REFERENCE_MAX_CHARS: its first chunk (title, opening) plus the chunks that best
+         match the claim, in document order, up to REFERENCE_MAX_CHARS characters. Ranked like the booklet pages: BM25
+@@ -425,10 +432,11 @@ class ClaimVerificationEngine:
+                 queries.append(translated)
+         ranked = PassageRetriever([{"text": c, "index": i} for i, c in enumerate(chunks)]).retrieve_hybrid(
+             queries[0], top_k=len(chunks), query_variants=queries[1:])
++        budget = budget or config.REFERENCE_MAX_CHARS
+         keep, used = {0}, len(chunks[0])
+         for p in ranked:
+             i = p["index"]
+-            if i not in keep and used + len(chunks[i]) <= config.REFERENCE_MAX_CHARS:
++            if i not in keep and used + len(chunks[i]) <= budget:
+                 keep.add(i)
+                 used += len(chunks[i])
+         return [chunks[i] for i in sorted(keep)], usage
+@@ -701,8 +709,9 @@ class ClaimVerificationEngine:
+ 
+         if self.prompt_mode in ("compact", "ids"):
+             texts, usage = chunk_reference(reference), (0, 0)
+-            if config.REFERENCE_MAX_CHARS and len(reference) > config.REFERENCE_MAX_CHARS:
+-                texts, usage = self._focus_reference(texts, claim, claim_language)
++            budget = self._reference_budget(len(reference))
++            if config.REFERENCE_MAX_CHARS and len(reference) > budget:
++                texts, usage = self._focus_reference(texts, claim, claim_language, budget)
+             chunks = [{"text": c, "page_number": None, "proposal_id": None} for c in texts]
+             result = self._compact_predict(
+                 passages=chunks,
