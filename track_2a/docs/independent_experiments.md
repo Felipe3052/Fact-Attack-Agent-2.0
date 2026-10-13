@@ -753,6 +753,20 @@ Holdout (27 Sep 2026 booklets, 90 balanced task B claims, new booklets):
   the cascade costs more than E17a there. The cascade is therefore a trade of tokens against a small F1 risk, not a
   free gain: no configuration here is better on both sets. The token and time scores are relative to the other
   teams and cannot be computed locally (the starter scorer says so), so the effect on S_B is only estimated.
+- **Escalation rules compared offline (E22):** the first call alone was run with the cut on all 1,488 cases
+  (`E22_cheap_cut1500/2000/2500`, with the label probabilities), and the escalated cases take the label and tokens of
+  E17a (a simulation, not a run). Searching a threshold per predicted label for the lowest tokens at the F1 of E17a:
+
+| First call sees | Cheap only: F1 / tokens | Uniform threshold at F1 of E17a | Per-label threshold (0 / 1 / 2) at F1 of E17a |
+|---|---:|---:|---:|
+| 1,500 chars | 0.9537 / 624 | 0.9999 → 1,380 tokens | 0.999 / 0.999 / 0.9999 → **1,110 tokens (−35 %)** |
+| 2,000 chars | 0.9650 / 732 | none (always escalates) | 0.95 / 0.999 / never → 1,386 tokens |
+| 2,500 chars | 0.9530 / 832 | 0.999 → 1,274 tokens | 0.5 / 0.999 / 0.99 → 1,175 tokens |
+
+  Chosen on four folds and applied to the fifth, the per-label thresholds of the 1,500 case held the F1 of E17a in
+  four folds (−520 to −730 tokens per case); in the fifth the search selected different thresholds and lost 0.018. So
+  the saving at the F1 of E17a is about 20–35 %, and a threshold tuned on this data is not a guarantee for new
+  booklets. These per-label thresholds are not in the code (`B_ESCALATE_BELOW` is one number).
 - **Decision: E19c adopted** (`B_PROMPT=topic`, `B_ESCALATE_BELOW=0.98`, `B_SHORT_CHARS=2000`, defaults in
   `src/config.py` and both `.env.example` files). An endpoint without logprobs makes every case escalate (the full
   prompt again, so the labels stay those of E17a at ~2.1× the tokens); a refused `logprobs` parameter is retried
