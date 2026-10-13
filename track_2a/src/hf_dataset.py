@@ -13,6 +13,7 @@ Usage:
 import json
 import random
 import re
+import time
 import urllib.request
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -42,19 +43,35 @@ def booklet_filename(url: str, publish_date: str) -> str:
     return f"{publish_date}_{lang}.pdf"
 
 
-def _download(url: str, dest: Path) -> bool:
+DOWNLOAD_ATTEMPTS = 4
+
+
+def _download(url: str, dest: Path, attempts: int = DOWNLOAD_ATTEMPTS) -> bool:
+    """
+    Download url to dest, retrying a broken transfer (an interrupted read cost the image one pre-parsed booklet on
+    13 October 2026). A PDF only counts if it starts with %PDF; the file is written only once it is complete.
+    """
     if dest.exists() and dest.stat().st_size > 0:
         return True
     dest.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "HackApertus-Track2A-Client/1.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = resp.read()
-        dest.write_bytes(data)
-        return True
-    except Exception as e:
-        print(f"  [WARNING] Could not download {url}: {e}")
-        return False
+    for attempt in range(1, attempts + 1):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "HackApertus-Track2A-Client/1.0"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = resp.read()
+            if dest.suffix.lower() == ".pdf" and not data.startswith(b"%PDF"):
+                raise ValueError("not a PDF")
+            tmp = dest.with_name(dest.name + ".part")
+            tmp.write_bytes(data)
+            tmp.replace(dest)
+            return True
+        except Exception as e:
+            if attempt == attempts:
+                print(f"  [WARNING] Could not download {url}: {e}")
+                return False
+            print(f"  [retry {attempt}/{attempts - 1}] {dest.name}: {type(e).__name__}")
+            time.sleep(2 ** attempt)
+    return False
 
 
 def load_rows() -> List[Dict]:
