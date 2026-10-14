@@ -818,6 +818,11 @@ class ClaimVerificationEngine:
             return f"({'; '.join(parts)}) {p['text']}" if parts else p["text"]
 
         texts = [label(p) for p in passages]
+        sections = {p.get("section") for p in passages}
+        if task_a and config.A_PART_LABEL_ONCE and len(passages) > 1 and len(sections) == 1 and None not in sections:
+            # one part: its name once, then only the page of each passage
+            texts = [f"({p['section']}; p. {p['page_number']}) {p['text']}" if k == 0 else f"(p. {p['page_number']}) {p['text']}"
+                     for k, p in enumerate(passages)]
         model_claim, extra_in, extra_out, extra_ms = claim, 0, 0, 0.0
         if config.TRANSLATE_CLAIM and passages:
             booklet_lang = guess_language(" ".join(p["text"] for p in passages[:3]))
