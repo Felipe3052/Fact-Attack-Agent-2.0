@@ -28,3 +28,14 @@ mocked and the query translations come from the E12 runs' caches (`.cache/gen/qu
   `git show 8541cb4:track_2a/src/part_context.py > part_context_E23.py`
 - `stress_dataset_old.json` / `stress_holdout_old.json`: cue list of E23; `stress_dataset_new.json` /
   `stress_holdout_new.json`: E24
+
+## E25–E27 — task A tokens (section 21)
+
+- `capture_prompts.py . <cases.jsonl> <query cache> <out.jsonl>` — records the exact task A prompts of the submission
+  configuration without calling Apertus (the request function is replaced)
+- `tok_breakdown.py <tokenizer.json> <prompts.jsonl> <predictions.jsonl> <cases.jsonl> <out.json>` — tokens per part of
+  the prompt with the Apertus tokenizer (`swiss-ai/Apertus-70B-Instruct-2509`'s `tokenizer.json`, the v1.5 file is
+  not public; it matches the reported counts within ±2 tokens in 515 of 515 same-language cases)
+- `score_variants.py . <baseline run> <runs…>` — paired label changes and the estimated score change of task A runs
+- `simulate_cascade.py . <label_probs.jsonl> <short run> <full run>` — bias on label 2 and escalation to the full prompt,
+  offline from the journaled probabilities (`E27_t1j_topic/label_probs.jsonl`, `HO_E27_t1j_topic/label_probs.jsonl`)

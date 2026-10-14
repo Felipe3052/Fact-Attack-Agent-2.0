@@ -114,9 +114,10 @@ A_SKILL_PROMPT = os.getenv("A_SKILL_PROMPT", "false").lower() in ("true", "1", "
 # the submission image sets no pipeline variables and runs these defaults. A_COMPACT_PROMPT=false restores the
 # previous baseline, whose requests are byte-identical to 7c17c9c (tests/test_apertus_client.py)
 A_COMPACT_PROMPT = os.getenv("A_COMPACT_PROMPT", "true").lower() in ("true", "1", "yes")
-# E25 experiment: blocks left out of the task A system prompt, comma-separated names of
-# ApertusClient.A_PROMPT_BLOCKS (role, classes, numbers, unmentioned, confidence, probs); empty = full prompt
-A_PROMPT_DROP = os.getenv("A_PROMPT_DROP", "").strip()
+# E25: blocks left out of the task A system prompt, comma-separated names of ApertusClient.A_PROMPT_BLOCKS (role,
+# classes, numbers, unmentioned, confidence, probs); empty = full prompt. Adopted: "role" (-34 tokens, labels kept);
+# every other block carries the labels (without it answers turn to contradiction)
+A_PROMPT_DROP = os.getenv("A_PROMPT_DROP", "role").strip()
 # E26 experiment: when every task A passage has the same section (a part context), name it once before the first
 # passage instead of before each one
 A_PART_LABEL_ONCE = os.getenv("A_PART_LABEL_ONCE", "false").lower() in ("true", "1", "yes")
