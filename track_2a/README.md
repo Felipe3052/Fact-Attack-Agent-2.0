@@ -19,7 +19,7 @@ German, French and Italian.
 
 > Predictions describe the relationship between a claim and the official booklet. They are not political advice.
 
-Josip's earlier comparison of retrieval and evidence variants (R2 and others, all 1,488 cases, k=12) is in the
+The earlier comparison of retrieval and evidence variants (R2 and others, all 1,488 cases, k=12) is in the
 [optimization report](docs/competition_optimization_report.md). The measurements since then (reproducible decision
 runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E22) are in
 [independent_experiments.md](docs/independent_experiments.md) with their predictions in
@@ -68,7 +68,8 @@ With `A_COMPACT_PROMPT=false` every request is byte-identical to the previous su
 `B_PROMPT=topic` (on by default, E18/E19c) is the task B cascade: a ~190-token label-only prompt that sees at most
 `B_SHORT_CHARS` characters of the reference answers first; when its label probability is below `B_ESCALATE_BELOW` the
 case is asked again with the full prompt (references up to 9,000 characters keep `REFERENCE_MID_CHARS`, E17a). All
-1,488 task B pairs: macro-F1 0.987 → 0.982, input tokens 1,640 → 865; holdout (two votes) 3 → 4 wrong labels of 90.
+1,488 task B pairs: macro-F1 0.987 → 0.982, input tokens 1,640 → 865; holdout (two votes) 3 → 4–6 wrong labels of 90
+(4 in the run reported above, 6 in the first run).
 `B_PROMPT=` (empty) restores the state before the cascade; see `docs/independent_experiments.md`, sections 17–18.
 
 `PART_CONTEXT` (on by default, E12) replaces the 8 retrieved pages by the part of the booklet the claim's opening names,
@@ -130,7 +131,7 @@ The input/output format is documented in the [overview README](../README.md#offi
 
 ```bash
 export API_KEY="your_api_key_here"
-make run      # builds the image (downloads + pre-parses the booklets), benchmarks the 402-pair test split (~4 min)
+make run      # builds the image (downloads + pre-parses the booklets), benchmarks the 398-pair test split (~4 min)
 make test     # unit tests, no API calls
 ```
 
@@ -167,13 +168,20 @@ track_2a/
 ├── tests/                    # Unit tests
 └── src/
     ├── cli.py                # predict / run / benchmark / compare / warm-cache / download / web
-    ├── inference.py          # ClaimVerificationEngine: retrieval -> Apertus -> evidence pages; booklet cache
-    ├── retriever.py          # Hybrid booklet-wide BM25 (claim + vote title) and proposal-filtered retrieval
+    ├── inference.py          # ClaimVerificationEngine: part or retrieval -> Apertus -> evidence; booklet cache
+    ├── part_context.py       # Contents-guided part selection: claim opening -> part, contents page -> pages
+    ├── retriever.py          # Hybrid booklet-wide BM25 (claim + vote title) and proposal-filtered retrieval (fallback)
+    ├── query_translation.py  # Claim translated into the booklet language for ranking (guarded)
     ├── pdf_parser.py         # Pages, section labels, proposal boundaries
-    ├── apertus_client.py     # CSCS client, prompts (ids / json / compact), retries
+    ├── quick_booklet.py      # Page-by-page reading of a booklet that is not parsed yet
+    ├── page_pool.py          # Process pool that parses new booklets at start-up
+    ├── apertus_client.py     # CSCS client, prompts (ids / json / compact, task B cascade), retries
+    ├── http_chat.py          # Standard-library HTTP client for the chat endpoint
+    ├── evidence.py           # Evidence quotes: cited PyMuPDF pages and their best text blocks
     ├── text_utils.py         # De-hyphenation, chunking, snippet selection, language detection
     ├── numerical_checker.py  # Swiss number normalisation; reports numerical conflicts
     ├── evaluator.py          # Macro-F1, language pairs, evidence grounding, p95 latency
+    ├── official_evaluation.py  # Offline scoring with the organisers' pinned evaluate.py
     ├── hf_dataset.py         # OST dataset + booklet download, dev/test split by voting date
     ├── results_summary.py    # Collects saved runs for the app and README
     ├── download_data.py      # Demo dataset + 2026/2024 booklets

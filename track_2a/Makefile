@@ -4,8 +4,8 @@ IMAGE_NAME ?= hackapertus-track2a
 
 # Judges run `make run` from the root of the project.
 # It builds and executes the Docker container, passing required environment variables.
-# By default it benchmarks the held-out test split (402 pairs of 5 voting dates never used during development,
-# ~4 min with 4 parallel requests). The image holds no gold labels: the dataset is fetched when the run starts.
+# By default it benchmarks the test split (398 pairs of 5 voting dates in dataset v1.1; 402 in v1.0; ~4 min with
+# 4 parallel requests). The image holds no gold labels: the dataset is fetched when the run starts.
 # The run's JSON (metrics and per-sample predictions) is written to track_2a/results/ on the host.
 run:
 	docker build --build-arg GIT_COMMIT="$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" -t $(IMAGE_NAME) .
