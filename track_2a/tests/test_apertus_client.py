@@ -45,6 +45,7 @@ class TestApertusClient(unittest.TestCase):
         self.assertEqual(calls[0]["temperature"], calls[1]["temperature"])
         self.assertEqual(calls[0]["max_tokens"], calls[1]["max_tokens"])
 
+    @patch("src.config.A_PROMPT_DROP", "")  # this switch alone; E25 is checked in TestCompactPromptSwitch
     def test_skill_prompt_is_opt_in_and_task_a_only(self):
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content='{"label": 1, "evidence_ids": []}'))],
@@ -71,6 +72,7 @@ class TestApertusClient(unittest.TestCase):
         self.assertEqual(len({call["messages"][1]["content"] for call in calls}), 1)
         self.assertEqual({(call["temperature"], call["max_tokens"]) for call in calls}, {(calls[0]["temperature"], calls[0]["max_tokens"])})
 
+    @patch("src.config.A_PROMPT_DROP", "")  # this switch alone; E25 is checked in TestCompactPromptSwitch
     def test_compact_prompt_is_opt_in_and_task_a_only(self):
         response = SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content='{"label": 1, "evidence_ids": []}'))],
@@ -226,7 +228,7 @@ class TestCompactPromptSwitch(unittest.TestCase):
         client.mock = False
         calls = []
         settings = {**SUBMISSION_PROMPT_SETTINGS, "A_COMPACT_PROMPT": False, "A_SKILL_PROMPT": False,
-                    "A_RELATION_PROMPT": False, **switches}
+                    "A_RELATION_PROMPT": False, "A_PROMPT_DROP": "", **switches}
         with ExitStack() as stack:
             for name, value in settings.items():
                 stack.enter_context(patch(f"src.config.{name}", value))
@@ -283,6 +285,18 @@ class TestCompactPromptSwitch(unittest.TestCase):
         self.assertEqual(digest_off, SUBMISSION_TASK_A_REQUESTS_SHA256)
         self.assertEqual(on[0]["messages"][0]["content"], off[0]["messages"][0]["content"] + ApertusClient.A_COMPACT_PROMPT_TEXT)
         self.assertEqual(self._requests("B", A_COMPACT_PROMPT=default)[1], SUBMISSION_TASK_B_REQUESTS_SHA256)
+
+    def test_submission_default_drops_only_the_role_sentence_from_task_a(self):
+        from tests.test_submission_config import effective_config
+        default = effective_config(["A_PROMPT_DROP"], self._clean_env())["A_PROMPT_DROP"]
+        self.assertEqual(default, "role")
+        on, _ = self._requests("A", A_PROMPT_DROP=default)
+        off, _ = self._requests("A")
+        role = ApertusClient.A_PROMPT_BLOCKS["role"][0]
+        self.assertTrue(off[0]["messages"][0]["content"].startswith(role))
+        self.assertEqual(on[0]["messages"][0]["content"], off[0]["messages"][0]["content"][len(role):])
+        self.assertEqual(on[0]["messages"][1], off[0]["messages"][1])
+        self.assertEqual(self._requests("B", A_PROMPT_DROP=default)[1], SUBMISSION_TASK_B_REQUESTS_SHA256)
 
     def test_explicit_off_requests_are_byte_identical_to_the_previous_baseline(self):
         self.assertEqual(self._requests("A")[1], SUBMISSION_TASK_A_REQUESTS_SHA256)

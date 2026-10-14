@@ -818,6 +818,11 @@ class ClaimVerificationEngine:
             return f"({'; '.join(parts)}) {p['text']}" if parts else p["text"]
 
         texts = [label(p) for p in passages]
+        sections = {p.get("section") for p in passages}
+        if task_a and config.A_PART_LABEL_ONCE and len(passages) > 1 and len(sections) == 1 and None not in sections:
+            # one part: its name once, then only the page of each passage
+            texts = [f"({p['section']}; p. {p['page_number']}) {p['text']}" if k == 0 else f"(p. {p['page_number']}) {p['text']}"
+                     for k, p in enumerate(passages)]
         model_claim, extra_in, extra_out, extra_ms = claim, 0, 0, 0.0
         if config.TRANSLATE_CLAIM and passages:
             booklet_lang = guess_language(" ".join(p["text"] for p in passages[:3]))
@@ -865,6 +870,13 @@ class ClaimVerificationEngine:
                     out.tokens_completion += first.tokens_completion
                     out.tokens_total += first.tokens_total
                     out.latency_ms += first.latency_ms
+        elif task_a and config.A_PROMPT:
+            out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote,
+                                            system_prompt=self.client.A_PROMPTS[config.A_PROMPT])
+            if config.A_PROBS_JOURNAL_PATH:
+                with _PROMPT_INPUT_JOURNAL_LOCK, open(config.A_PROBS_JOURNAL_PATH, "a", encoding="utf-8") as journal:
+                    journal.write(json.dumps({"id": case_id, "label": out.label, "ids": out.evidence_ids,
+                                              "p": [out.p_entail, out.p_neutral, out.p_contra]}) + "\n")
         elif self.prompt_mode == "ids":
             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):

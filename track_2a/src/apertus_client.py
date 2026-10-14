@@ -192,6 +192,23 @@ class ApertusClient:
 
     B_REASON_PROMPTS = {"topic4"}
 
+    # E27: task A in the same order as the task B prompts, answered as '<label>|<ids>' (a few tokens instead of a
+    # JSON object). Written for this project.
+    _A_TOPIC = (
+        "You check a CLAIM against numbered REFERENCE passages [P1], [P2], ... from an official Swiss federal voting "
+        "booklet. They may be in different languages (German, French, Italian): compare meaning, not wording. Use "
+        "only the passages, never outside knowledge.\n"
+        "Decide in this order:\n"
+        "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, the "
+        "label is 1.\n"
+        "2. If they do: 0 if they support the claim; 2 only if they state something that cannot be true together "
+        "with the claim (a different number or date, the opposite recommendation); otherwise 1.\n"
+        "Missing information is never a contradiction. 'According to the summary / the committee / the Federal "
+        "Council, X' is 1 when that text does not say X.\n"
+        "Labels: 0 entailment, 1 neutral, 2 contradiction.\n")
+    _A_ANSWER = ("Answer format: the label digit, then '|', then the ids of the passages that justify the label, "
+                 "e.g. '0|P2' or '2|P3,P7'. For 1 answer '1|'. No other text.")
+
     def infer_label(
         self,
         passages: List[str],
@@ -251,6 +268,7 @@ class ApertusClient:
         claim: str,
         claim_language: Optional[str] = None,
         vote: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> NLIOutput:
         """
         Token-efficient NLI: passages are numbered [P1]..[Pn]; the model answers '<label>|<ids>'.
@@ -269,7 +287,7 @@ class ApertusClient:
             return out
 
         response, err = self._chat(
-            [{"role": "system", "content": self.COMPACT_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
+            [{"role": "system", "content": system_prompt or self.COMPACT_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
             max_tokens=24,
             logprobs=True,
         )
@@ -296,7 +314,7 @@ class ApertusClient:
                 ids.append(i)
 
         usage = getattr(response, "usage", None)
-        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens(self.COMPACT_SYSTEM_PROMPT + user_prompt)
+        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens((system_prompt or self.COMPACT_SYSTEM_PROMPT) + user_prompt)
         tc = getattr(usage, "completion_tokens", None) or self._estimate_tokens(content)
         return NLIOutput(
             label=label,
@@ -529,6 +547,30 @@ class ApertusClient:
         "same claim; missing support is not a contradiction. 1 if they neither support nor refute it. Use only the "
         "passages, no outside facts.\n"
     )
+    A_PROMPTS = {"topic": _A_TOPIC + _A_ANSWER,
+                 "topic_rules": _A_TOPIC + A_COMPACT_PROMPT_TEXT.lstrip("\n") + _A_ANSWER}
+
+    # E25: blocks of the 'ids' system prompt that task A can leave out (A_PROMPT_DROP); each is removed verbatim
+    _CONFIDENCE_HELP = (
+        "3. CONTINUOUS CONFIDENCE: Estimate fuzzy membership degrees [0.0 to 1.0] for:\n"
+        "   - p_entail: confidence of direct textual support\n"
+        "   - p_neutral: confidence of missing/unaddressed information\n"
+        "   - p_contra: confidence of factual, numerical, or logical contradiction\n\n")
+    A_PROMPT_BLOCKS = {
+        "role": ["You are an expert multilingual document-grounded Natural Language Inference (NLI) system "
+                 "for official Swiss voting booklets (Abstimmungsbüchlein).\n"],
+        "classes": ["Classification Rules:\n"
+                    "- 0: Entailment -> The document context directly supports or confirms the claim.\n"
+                    "- 1: Neutral -> The document context does NOT mention the claim, or contains insufficient information.\n"
+                    "- 2: Contradiction -> The document context directly contradicts, refutes, or states the opposite of the claim.\n\n"],
+        "numbers": ["1. NUMBERS, QUANTITIES & DATES: If a claim cites a number, date, or percentage that differs from the "
+                    "document (e.g. 500'000 vs 1.7 million, or 2030 vs 2050), it is a DIRECT CONTRADICTION (2)!\n"],
+        "unmentioned": ["2. UNMENTIONED TOPICS: If a claim is about a topic not mentioned in the text, you MUST choose 1 "
+                        "(Neutral), never 2.\n"],
+        "confidence": [_CONFIDENCE_HELP],
+        # no confidences at all: shorter answer; the decision rules then keep the model's label
+        "probs": [_CONFIDENCE_HELP, '  "p_entail": <0.0 - 1.0>,\n  "p_neutral": <0.0 - 1.0>,\n  "p_contra": <0.0 - 1.0>,\n'],
+    }
 
     def infer(
         self,
@@ -636,6 +678,12 @@ class ApertusClient:
             system_prompt += self.A_SKILL_PROMPT_TEXT
         if task_a and passages is not None and config.A_COMPACT_PROMPT:
             system_prompt += self.A_COMPACT_PROMPT_TEXT
+        if task_a and passages is not None and config.A_PROMPT_DROP:
+            for name in [b.strip() for b in config.A_PROMPT_DROP.split(",") if b.strip()]:
+                for text in self.A_PROMPT_BLOCKS[name]:
+                    if text not in system_prompt:
+                        raise ValueError(f"A_PROMPT_DROP={name}: block not in the task A prompt")
+                    system_prompt = system_prompt.replace(text, "")
 
         if passages is not None and config.PROMPT_SHORT:
             # Same rules in fewer words: input tokens are scored relative to the most frugal team

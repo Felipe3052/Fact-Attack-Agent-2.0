@@ -1,0 +1,23 @@
+Apertus API attempt 1 failed: APIError; retry in 1.3s
+Apertus API attempt 1 failed: APIError; retry in 1.4s
+Apertus API attempt 1 failed: APIError; retry in 1.5s
+Apertus API attempt 1 failed: APIError; retry in 1.8s
+Apertus API attempt 1 failed: APIError; retry in 1.9s
+Apertus API attempt 1 failed: APIError; retry in 1.5s
+Apertus API attempt 1 failed: APIError; retry in 1.5s
+Apertus API attempt 1 failed: APIError; retry in 1.1s
+Apertus API attempt 1 failed: APIError; retry in 1.7s
+Apertus API attempt 1 failed: APIError; retry in 1.6s
+Apertus API attempt 1 failed: APIError; retry in 1.9s
+Apertus API attempt 1 failed: APIError; retry in 1.3s
+Apertus API attempt 1 failed: APIError; retry in 1.9s
+Apertus API attempt 1 failed: APIError; retry in 2.0s
+Apertus API attempt 1 failed: APIError; retry in 1.4s
+Apertus API attempt 1 failed: APIError; retry in 1.9s
+Apertus API attempt 1 failed: APIError; retry in 1.8s
+Apertus API attempt 1 failed: APIError; retry in 1.9s
+Apertus API attempt 1 failed: APIError; retry in 1.2s
+Apertus API attempt 1 failed: APIError; retry in 1.5s
+Apertus API attempt 1 failed: APIError; retry in 1.0s
+[timing] 1488 cases, wall 177.4 s, non-LLM 2.5 ms/case
+Successfully processed 1488 case(s) -> C:\GitHub\Apertus-Team-Fact-Attack-2026\track_2a\results\generalization\E27_t2_topic_rules\predictions.jsonl

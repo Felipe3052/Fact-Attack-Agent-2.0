@@ -11,9 +11,9 @@ German, French and Italian.
 
 - **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
   - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.989** macro-F1,
-    Hit@5 **0.983**, 1,825 input tokens; beginner **0.955**, 1,390 input tokens
-  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.974**, Hit@5 **0.983**,
-    1,791 input tokens; beginner **0.982**, 865 input tokens (before the task B cascade: 0.987, 1,640)
+    Hit@5 **0.983**, 1,791 input tokens; beginner **0.955**, 1,390 input tokens
+  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.977**, Hit@5 **0.980**,
+    1,757 input tokens; beginner **0.982**, 865 input tokens (before the task B cascade: 0.987, 1,640)
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
   **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 
@@ -21,7 +21,7 @@ German, French and Italian.
 
 The earlier comparison of retrieval and evidence variants (R2 and others, all 1,488 cases, k=12) is in the
 [optimization report](docs/competition_optimization_report.md). The measurements since then (reproducible decision
-runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E24) are in
+runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E27) are in
 [independent_experiments.md](docs/independent_experiments.md) with their predictions in
 [results/generalization/](results/generalization/).
 
@@ -54,6 +54,7 @@ B_PROMPT=topic                              # task B: short label-only first cal
 B_ESCALATE_BELOW=0.98                       # task B: full prompt again when the first answer is less sure
 B_SHORT_CHARS=2000                          # task B: reference characters the first call sees
 A_COMPACT_PROMPT=true                       # task A: compact label rules (E7, on in the submission; false = previous baseline)
+A_PROMPT_DROP=role                          # task A: prompt without its role sentence (E25; empty = full prompt)
 PART_CONTEXT=true                           # task A: context = the booklet part the claim names, via the contents page (E12)
 PART_CONTEXT_CHARS=6000                     # at most this many characters of that part
 PART_CONTEXT_CHARS_LEGAL=9000               # the voting-text part may keep this many (E23; 0 = PART_CONTEXT_CHARS)
@@ -160,7 +161,7 @@ track_2a/
 ├── technical_report.md       # Architecture, evaluation, findings, limitations
 ├── .env.example              # Every setting with its default (= what the submission image runs)
 ├── docs/experiments.md       # Every experiment with its numbers
-├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E24
+├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E27
 ├── docs/FactAttack_Technical_Report.pdf  # Submission PDF of the report (docs/build_report_pdf.py)
 ├── results/                  # Saved benchmark runs + summary.json
 │   └── generalization/       # Decision runs: predictions, official scores, fold/language/class reports

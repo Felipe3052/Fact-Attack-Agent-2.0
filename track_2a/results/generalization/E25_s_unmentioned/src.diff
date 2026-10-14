@@ -1,0 +1,91 @@
+diff --git a/track_2a/src/apertus_client.py b/track_2a/src/apertus_client.py
+index 4af480a..09244ea 100644
+--- a/track_2a/src/apertus_client.py
++++ b/track_2a/src/apertus_client.py
+@@ -192,6 +192,23 @@ class ApertusClient:
+ 
+     B_REASON_PROMPTS = {"topic4"}
+ 
++    # E27: task A in the same order as the task B prompts, answered as '<label>|<ids>' (a few tokens instead of a
++    # JSON object). Written for this project.
++    _A_TOPIC = (
++        "You check a CLAIM against numbered REFERENCE passages [P1], [P2], ... from an official Swiss federal voting "
++        "booklet. They may be in different languages (German, French, Italian): compare meaning, not wording. Use "
++        "only the passages, never outside knowledge.\n"
++        "Decide in this order:\n"
++        "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, the "
++        "label is 1.\n"
++        "2. If they do: 0 if they support the claim; 2 only if they state something that cannot be true together "
++        "with the claim (a different number or date, the opposite recommendation); otherwise 1.\n"
++        "Missing information is never a contradiction. 'According to the summary / the committee / the Federal "
++        "Council, X' is 1 when that text does not say X.\n"
++        "Labels: 0 entailment, 1 neutral, 2 contradiction.\n")
++    _A_ANSWER = ("Answer format: the label digit, then '|', then the ids of the passages that justify the label, "
++                 "e.g. '0|P2' or '2|P3,P7'. For 1 answer '1|'. No other text.")
++
+     def infer_label(
+         self,
+         passages: List[str],
+@@ -251,6 +268,7 @@ class ApertusClient:
+         claim: str,
+         claim_language: Optional[str] = None,
+         vote: Optional[str] = None,
++        system_prompt: Optional[str] = None,
+     ) -> NLIOutput:
+         """
+         Token-efficient NLI: passages are numbered [P1]..[Pn]; the model answers '<label>|<ids>'.
+@@ -269,7 +287,7 @@ class ApertusClient:
+             return out
+ 
+         response, err = self._chat(
+-            [{"role": "system", "content": self.COMPACT_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
++            [{"role": "system", "content": system_prompt or self.COMPACT_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
+             max_tokens=24,
+             logprobs=True,
+         )
+@@ -296,7 +314,7 @@ class ApertusClient:
+                 ids.append(i)
+ 
+         usage = getattr(response, "usage", None)
+-        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens(self.COMPACT_SYSTEM_PROMPT + user_prompt)
++        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens((system_prompt or self.COMPACT_SYSTEM_PROMPT) + user_prompt)
+         tc = getattr(usage, "completion_tokens", None) or self._estimate_tokens(content)
+         return NLIOutput(
+             label=label,
+@@ -529,6 +547,8 @@ class ApertusClient:
+         "same claim; missing support is not a contradiction. 1 if they neither support nor refute it. Use only the "
+         "passages, no outside facts.\n"
+     )
++    A_PROMPTS = {"topic": _A_TOPIC + _A_ANSWER,
++                 "topic_rules": _A_TOPIC + A_COMPACT_PROMPT_TEXT.lstrip("\n") + _A_ANSWER}
+ 
+     # E25: blocks of the 'ids' system prompt that task A can leave out (A_PROMPT_DROP); each is removed verbatim
+     _CONFIDENCE_HELP = (
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index 5912df9..ae9e871 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -120,6 +120,9 @@ A_PROMPT_DROP = os.getenv("A_PROMPT_DROP", "").strip()
+ # E26 experiment: when every task A passage has the same section (a part context), name it once before the first
+ # passage instead of before each one
+ A_PART_LABEL_ONCE = os.getenv("A_PART_LABEL_ONCE", "false").lower() in ("true", "1", "yes")
++# E27 experiment: a short task A prompt that decides in a fixed order (the subject first) and answers
++# "<label>|<passage ids>" (ApertusClient.A_PROMPTS: topic, topic_rules); empty = the JSON prompt
++A_PROMPT = os.getenv("A_PROMPT", "").strip()
+ # Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
+ PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
+ 
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index 96c05d3..7d80816 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -870,6 +870,9 @@ class ClaimVerificationEngine:
+                     out.tokens_completion += first.tokens_completion
+                     out.tokens_total += first.tokens_total
+                     out.latency_ms += first.latency_ms
++        elif task_a and config.A_PROMPT:
++            out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote,
++                                            system_prompt=self.client.A_PROMPTS[config.A_PROMPT])
+         elif self.prompt_mode == "ids":
+             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
+             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):

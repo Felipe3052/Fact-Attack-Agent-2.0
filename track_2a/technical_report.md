@@ -21,7 +21,7 @@ On **booklets the system never saw** (our holdout: 90 claims on the 27 September
 second person, used only to confirm the last changes), it reaches **macro-F1 0.989** and **evidence Hit@5 0.983** on the advanced
 task (booklet PDF) and **0.955** on the beginner task (reference text; 4 of 90 labels wrong). On the whole official
 dataset (v1.1, 1,488 pairs, 20 voting dates in 5 date-grouped folds) the same configuration scores
-**0.974 / Hit@5 0.983** and **0.982**, at 1,791 / 865 input tokens and 59 / 21 output tokens per case, with
+**0.977 / Hit@5 0.980** and **0.982**, at 1,757 / 865 input tokens and 59 / 21 output tokens per case, with
 processing time outside the LLM calls in the millisecond range. The beginner task trades 0.005 macro-F1 (0.987 at
 1,640 input tokens before) for half the tokens (section 2.4). All scores come from the organisers' `evaluate.py` on the official CLI's output.
 
@@ -37,7 +37,7 @@ opening, and the booklet's contents page locates that part of the vote, which be
 
 The central finding for the challenge's research question: **less, but the right context wins** — the whole booklet
 (~60k tokens) reaches 0.730 macro-F1, eight retrieved pages (~3,900 tokens) 0.949, and the one part the claim refers
-to (~1,800 tokens) 0.974.
+to (~1,800 tokens) 0.977.
 
 ---
 
@@ -220,20 +220,20 @@ with an Apertus request in flight.
 
 | Evaluation set | Task | Macro-F1 | Hit@5 | Input / output tokens | Apertus time (mean / p95) |
 |---|---|---:|---:|---:|---:|
-| **Holdout** (90 pairs) | Advanced | **0.989** | **0.983** | 1,825 / 57 | – |
+| **Holdout** (90 pairs) | Advanced | **0.989** | **0.983** | 1,791 / 57 | – |
 | **Holdout** (90 pairs) | Beginner | **0.955** | – | 1,390 / 40 | – |
-| **All pairs** (1,488) | Advanced | **0.974** | **0.983** | 1,791 / 59 | 1.1 s / 1.4 s |
+| **All pairs** (1,488) | Advanced | **0.977** | **0.980** | 1,757 / 59 | 1.1 s / 1.4 s |
 | **All pairs** (1,488) | Beginner | **0.982** | – | 865 / 21 | 0.25 s / 1.2 s |
 
-Holdout = unseen booklets; all pairs = 5 date-grouped folds, macro-F1 per fold 0.965–0.980 (advanced) and
+Holdout = unseen booklets; all pairs = 5 date-grouped folds, macro-F1 per fold 0.971–0.980 (advanced) and
 0.969–0.991 (beginner). Processing time outside the model calls: ~2 ms per case (CLI estimate, cached booklets). Before part selection
 (8 retrieved pages): 0.949 / Hit@5 0.881 at 3,915 tokens on all pairs, 0.933 / 0.850 on the holdout. Macro-F1 and
 Hit@5 by language pair (booklet → claim), all 1,488 pairs per task:
 
 | Pair | de→de | de→fr | de→it | fr→de | fr→fr | fr→it | it→de | it→fr | it→it |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Advanced F1 | 0.946 | 0.947 | 0.986 | 0.995 | 0.959 | 0.990 | 0.981 | 0.980 | 0.981 |
-| Advanced Hit@5 | 0.970 | 0.943 | 0.980 | 1.000 | 0.992 | 0.992 | 0.981 | 0.979 | 1.000 |
+| Advanced F1 | 0.947 | 0.947 | 0.986 | 0.995 | 0.959 | 0.990 | 0.987 | 0.980 | 1.000 |
+| Advanced Hit@5 | 0.960 | 0.943 | 0.980 | 1.000 | 0.977 | 0.992 | 0.981 | 0.979 | 1.000 |
 | Beginner F1 | 0.980 | 0.960 | 0.958 | 0.989 | 0.979 | 0.990 | 0.994 | 0.986 | 0.994 |
 
 ### 5.2 Full document vs. selected context (advanced, same 150 test pairs)
@@ -244,7 +244,7 @@ Hit@5 by language pair (booklet → claim), all 1,488 pairs per task:
 | Proposal filter, top 5 pages | JSON | 0.795 | 3,408 | 157 | 36.2 s* |
 | Hybrid, top 10 pages | ids | 0.926 | 6,023 | 55 | 3.8 s |
 | 12 pages, clipping, speaker boost, decision rules | ids | 0.946 | 5,713 | 55 | 2.8 s |
-| **Final: the claim's part (2.2), all 1,488 pairs** | **ids** | **0.974** | 1,791 | 59 | 1.4 s |
+| **Final: the claim's part (2.2), all 1,488 pairs** | **ids** | **0.977** | 1,757 | 59 | 1.4 s |
 
 \* measured while three runs shared the endpoint.
 
@@ -280,7 +280,7 @@ names is the cheapest and the most accurate.
 | E18: short label-only prompts (four variants, 190 tokens) | B 0.987 → 0.948–0.966, −30 % tokens | rejected alone |
 | **E19c: cascade, short call (≤ 2,000 chars), full prompt below p = 0.98** | B 0.987 → 0.982, −48 % tokens; holdout 3 → 4–6 wrong of 90 (4 in 5.1), −21 … −22 % | **adopted** |
 | E21b: cascade at p = 0.999, 2,500 chars | B 0.987 → 0.987, −26 % tokens; holdout +18 % tokens | settings only |
-| **E23: voting text 9,000 chars (2.2)** | A 0.968 → 0.974 (bootstrap +0.002 … +0.012), Hit@5 → 0.983, +2.3 % tokens | **adopted** |
+| **E23: voting text 9,000 chars (2.2)** | A 0.968 → 0.974, Hit@5 → 0.983, +2.3 % tokens | **adopted** |
 
 Full tables: [docs/experiments.md](docs/experiments.md) and [docs/independent_experiments.md](docs/independent_experiments.md).
 Runs on 150 pairs carry about ±3 F1 points of sampling noise; close decisions were re-run on 450 pairs, the last
@@ -297,7 +297,7 @@ ones on all pairs. A proxy without the model predicted gains for E1, E3 and E11 
   answers are saturated and its errors lie in the rest, which the cascade (2.4) re-asks.
 - **Distraction, not missing text, caused most errors.** With 8 retrieved pages the gold page was in the context in
   97.9 % of the Entailment/Contradiction cases and in 69 of 85 label errors; removing the other parts and votes
-  (E12) fixed 56 answers. Trimming the part itself (E14) or the prompt's wording (E13) costs accuracy at once.
+  (E12) fixed 56 answers. Trimming the part itself (E14) or the prompt's wording (E13, E25, E27: a 1,341-token prompt reaches 0.941, on the holdout 9 instead of 1 wrong) costs accuracy at once; only the role sentence could go (E25).
 - **Speaker attribution was a context problem.** Committee claims failed in 13.4 % of cases with retrieved pages;
   with the committee's own part as the context, 3 of 275 fail.
 - **Thinking helps, at a high price.** Letting the thinking model reason before its answer fixes half of the remaining
@@ -309,9 +309,9 @@ ones on all pairs. A proxy without the model predicted gains for E1, E3 and E11 
 
 ## 6. Limitations
 
-- **Remaining errors** (advanced, 38 of 1,488 pairs): Contradiction → Neutral 10, → Entailment 10, Entailment →
-  Contradiction 9, Neutral → Contradiction 7, Entailment → Neutral 2. Before E23 only 1 of 48 errors lacked the gold page
-  in the context: reading errors, not retrieval misses. Voting-text claims: 13 of 235 wrong (24 before E23).
+- **Remaining errors** (advanced, 34 of 1,488 pairs): Contradiction → Neutral 10, → Entailment 10, Entailment →
+  Contradiction 6, Entailment → Neutral 5, Neutral → Contradiction 3. Voting-text claims: 10 of 235 wrong (24
+  before E23).
 - **Part selection relies on the claims naming their source** and on a readable contents page (2020–2026, 62
   booklets); otherwise it falls back to the retrieval of 8 pages (0.949 / Hit@5 0.881). Rephrased openings (E24,
   offline stress test) reach that fallback, not a wrong part (38 → 6 of 1,400).
@@ -339,7 +339,7 @@ and are scored with its `evaluate.py`; `scripts/run_decision.py` runs the submis
 official CLI and keeps predictions, scores and settings in `results/generalization/`.
 
 Settings: `.env.example` lists every setting with its default (a test keeps it equal to `src/config.py`), among them
-`NLI_TOP_K` (`8`), `PROMPT_MODE` (`ids`), `RETRIEVAL_QUERY_MODE` (`union`), `PART_CONTEXT` (`true`), `PART_CONTEXT_CHARS_LEGAL` (`9000`),
+`NLI_TOP_K` (`8`), `PROMPT_MODE` (`ids`), `RETRIEVAL_QUERY_MODE` (`union`), `PART_CONTEXT` (`true`), `PART_CONTEXT_CHARS_LEGAL` (`9000`), `A_PROMPT_DROP` (`role`),
 `REFERENCE_MID_CHARS` (`3000`), `B_PROMPT` (`topic`), `B_ESCALATE_BELOW` (`0.98`), `B_SHORT_CHARS` (`2000`).
 
 ---
@@ -347,7 +347,6 @@ Settings: `.env.example` lists every setting with its default (a test keeps it e
 ## 8. Next steps
 
 1. Claims without a recognisable opening: choose the part from the claim's content.
-2. The remaining Contradiction → Neutral errors; reasoning at lower cost.
-3. A larger holdout over several new votes (the cascade saw only two).
+2. The remaining Contradiction → Neutral errors; a larger holdout over several new votes.
 
 **License:** code Apache-2.0 ([LICENSE](../LICENSE)); report CC-BY-4.0. With PyMuPDF (AGPL-3.0) the image is AGPL-3.0.

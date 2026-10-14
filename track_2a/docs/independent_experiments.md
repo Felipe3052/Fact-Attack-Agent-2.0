@@ -853,3 +853,38 @@ Holdout (27 Sep 2026 booklets, 90 balanced task B claims, new booklets):
 - **Decision: adopted.** It cannot change a known case and turns most wrong-part failures on unfamiliar wordings into
   the fallback retrieval (~0.95 macro-F1 in E8). Not done: adding the
   1–2 best retrieved pages outside the part as a safety net (needs a paired run; E12 showed that extra pages distract).
+
+## 21. E25–E27 — fewer task A tokens: what the prompt can lose (2026-10-14)
+
+- **Where the tokens go** (all 1,488 task A prompts of E23 recorded offline and counted with the Apertus tokenizer;
+  515 of 515 same-language cases within ±2 of the reported count): system prompt **690**, context 996 (of which page
+  labels 36), claim and framing 77, chat template 19, translation ~9; answer **59** (the JSON with three
+  confidences, in a code block). Whitespace is already collapsed; joining the words pypdf splits ("Pro blem") saves
+  7 tokens per case, one part label instead of one per page 6: neither was run.
+- **E25 — blocks of the system prompt left out** (`A_PROMPT_DROP`), paired against E23 on all 1,488 cases. The score
+  change uses the organisers' formula (S_A = 0.50 F1 + 0.20 evidence + 0.15 T + 0.15 K) with the lowest published
+  token count of another team (1,266) as the best value and the local time unchanged, so it is an estimate:
+
+| Left out (tokens) | Macro-F1 | Hit@5 | In + out tokens | Fixed / broken | Est. score | Holdout (90) |
+|---|---:|---:|---:|---:|---:|---|
+| none (E23) | 0.974 | 0.983 | 1,791 + 59 | – | – | 1 wrong |
+| **role sentence (−34)** | **0.977** | 0.980 | **1,757 + 59** | 5 / 1 | **+0.002** | **1 wrong** |
+| confidence explanation (−72) | 0.966 | 0.991 | 1,719 + 59 | 11 / 24 | +0.001 | – |
+| "unmentioned topic → 1" rule (−37) | 0.962 | 0.984 | 1,754 + 58 | 5 / 23 | −0.002 | – |
+| role + numbers rule (−110) | 0.954 | 0.943 | 1,681 + 60 | 10 / 40 | −0.007 | – |
+| confidences altogether (−121, answer −35) | 0.912 | 0.993 | 1,670 + 24 | 9 / 101 | −0.012 | – |
+
+  The new errors are nearly all Neutral → Contradiction (confidences: 98 of 101 broken; their explanation: 22 of 24):
+  the confidence lines, the unmentioned-topic rule and the number rule are what keeps Apertus from calling an
+  unrelated passage a contradiction.
+- **E27 — a short subject-first prompt** (`A_PROMPT=topic`, our task B rule order with passage ids, 238 instead of
+  690 tokens, answered as `0|P2`: 8 instead of 59 output tokens): dataset 0.941 / Hit@5 0.966 at 1,341 tokens
+  (10 fixed / 61 broken, mostly → contradiction; the rerun repeats it within 2 labels), estimated +0.011; with our
+  label rules added (`topic_rules`, 335 tokens) 0.947 / 0.952 at 1,438, +0.006. **On the holdout 9 wrong instead of
+  1** (0.900, estimated −0.013): only 65 of 90 answers are sure (≥ 0.98) against 87 % on the dataset, so a cascade
+  to the full prompt (offline, from the journaled label probabilities) has to re-ask 24–28 % of the new booklets'
+  cases and loses the saving (best: 3 wrong at 1,927 tokens). A bias against label 2 does not help (5-fold CV).
+- **Decision:** `A_PROMPT_DROP=role` adopted (default in `src/config.py` and both `.env.example` files; same labels
+  within noise on both sets, −34 input tokens). The short prompt (E27) and every other block are rejected: on unseen
+  booklets they cost more F1 than their tokens are worth. Runs: `E25_*`, `E27_*`, `HO_E25_s_role`,
+  `HO_E27_t1j_topic`.

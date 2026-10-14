@@ -28,9 +28,9 @@ are saved in [`track_2a/results/generalization/`](track_2a/results/generalizatio
 
 | Evaluation set | Task | Macro-F1 | Hit@5 | Input tokens | Output tokens |
 | :--- | :---: | ---: | ---: | ---: | ---: |
-| **Holdout** (unseen booklets, 90 claims) | A | **0.989** | **0.983** | 1,825 | 57 |
+| **Holdout** (unseen booklets, 90 claims) | A | **0.989** | **0.983** | 1,791 | 57 |
 | **Holdout** (unseen booklets, 90 claims) | B | **0.955** | – | 1,390 | 40 |
-| **Dataset** (1,488 pairs) | A | **0.974** | **0.983** | 1,791 | 59 |
+| **Dataset** (1,488 pairs) | A | **0.977** | **0.980** | 1,757 | 59 |
 | **Dataset** (1,488 pairs) | B | **0.982** | – | 865 | 21 |
 
 Tokens are means per case; Hit@5 is the share of gold entailment/contradiction cases where one of the first five evidence items overlaps the gold passage (task A only).
@@ -38,7 +38,7 @@ Tokens are means per case; Hit@5 is the share of gold entailment/contradiction c
 - **Tasks:** A (advanced) = booklet PDF + claim + vote; B (beginner) = reference text + claim. Mean Apertus time per
   case 1.1 s (A) / 0.25 s (B); processing time outside the model calls stays in the millisecond range per case.
 - **Sets:** the holdout is our own, on the 27 September 2026 vote; the dataset is v1.1 with 20 voting dates in 5
-  date-grouped folds (macro-F1 per fold: A 0.965–0.980, B 0.969–0.991).
+  date-grouped folds (macro-F1 per fold: A 0.971–0.980, B 0.969–0.991).
 - **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
   vote, which are not part of the dataset. We wrote them before the system ever ran on them, and a second team member
   checked every label (90/90 agree). We used the holdout only at the end: to confirm the task B changes (reference cut,
@@ -135,6 +135,10 @@ in brackets point to the [experiment log](track_2a/docs/experiments.md) and the
   their source differently fall back to the retrieval instead of a wrong part (wrong part on unseen wordings 38 → 6
   of 1,400): the source must start within the first 30 characters, and the cue list has other wordings in DE/FR/IT.
   All 3,173 known claims keep exactly their part, so every score above is unchanged.
+- **Where task A's tokens go, and what the prompt can lose** [E25–E27]: of ~1,850 tokens per case the system prompt
+  takes 690 and the answer 59. Leaving out the role sentence keeps the labels (0.974 → 0.977, holdout unchanged,
+  −34 tokens: adopted); every other block, and a short subject-first prompt with a 5-token answer (1,341 tokens,
+  0.941 on the dataset but 9 instead of 1 wrong on the holdout), turns answers to contradiction: rejected.
 - **Task B: tiered reference budget and cascade** [E17a, E19c]: references up to 9,000 characters keep 3,000
   (0.984 → 0.987, 1,732 → 1,640 input tokens). On top, a short label-only prompt answers first on at most 2,000
   reference characters; below a label probability of 0.98 (~10 % of the cases) we ask the full prompt again. All
@@ -323,7 +327,7 @@ track_2a/
 ├── app.py                    # Streamlit app (claim check, benchmark dashboard from results/)
 ├── technical_report.md       # Architecture, evaluation, limitations
 ├── docs/experiments.md       # Every experiment with its numbers
-├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E24
+├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E27
 ├── docs/FactAttack_Technical_Report.pdf  # Submission PDF of the report (docs/build_report_pdf.py)
 ├── results/                  # Saved benchmark runs (+ summary.json); generalization/ = decision runs
 ├── data/                     # Demo dataset, 2026-06-14 booklets, holdout claims; hf/ and other booklets are downloaded
