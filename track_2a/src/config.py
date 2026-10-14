@@ -123,6 +123,8 @@ A_PART_LABEL_ONCE = os.getenv("A_PART_LABEL_ONCE", "false").lower() in ("true", 
 # E27 experiment: a short task A prompt that decides in a fixed order (the subject first) and answers
 # "<label>|<passage ids>" (ApertusClient.A_PROMPTS: topic, topic_rules); empty = the JSON prompt
 A_PROMPT = os.getenv("A_PROMPT", "").strip()
+# E27 analysis: with A_PROMPT, every task A answer's label and label probabilities are appended here (empty = off)
+A_PROBS_JOURNAL_PATH = os.getenv("A_PROBS_JOURNAL_PATH", "")
 # Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
 PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
 

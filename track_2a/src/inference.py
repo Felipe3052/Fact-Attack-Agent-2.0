@@ -873,6 +873,10 @@ class ClaimVerificationEngine:
         elif task_a and config.A_PROMPT:
             out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote,
                                             system_prompt=self.client.A_PROMPTS[config.A_PROMPT])
+            if config.A_PROBS_JOURNAL_PATH:
+                with _PROMPT_INPUT_JOURNAL_LOCK, open(config.A_PROBS_JOURNAL_PATH, "a", encoding="utf-8") as journal:
+                    journal.write(json.dumps({"id": case_id, "label": out.label, "ids": out.evidence_ids,
+                                              "p": [out.p_entail, out.p_neutral, out.p_contra]}) + "\n")
         elif self.prompt_mode == "ids":
             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):
