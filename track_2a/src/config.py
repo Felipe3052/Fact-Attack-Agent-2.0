@@ -72,6 +72,9 @@ PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
 # regular retrieval.
 PART_CONTEXT = os.getenv("PART_CONTEXT", "true").lower() in ("true", "1", "yes")
 PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
+# E23 (adopted): the voting-text part (dense legal pages, often two of them) gets a larger budget, so the article a
+# claim names is not cut off behind a long first page (0 = PART_CONTEXT_CHARS)
+PART_CONTEXT_CHARS_LEGAL = int(os.getenv("PART_CONTEXT_CHARS_LEGAL", "9000"))
 # Processing time: a booklet that is not parsed yet is read page by page for the first cases' parts (contents page,
 # headings, the part's pages; src/quick_booklet.py), the same text and evidence, while the full parse goes on
 QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")

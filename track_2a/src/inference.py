@@ -377,6 +377,8 @@ class ClaimVerificationEngine:
             return None
         label = _PART_LABELS[part]
         budget, usage = config.PART_CONTEXT_CHARS, (0, 0)
+        if part == "legal_text" and config.PART_CONTEXT_CHARS_LEGAL:
+            budget = config.PART_CONTEXT_CHARS_LEGAL
         if sum(len(p["text"]) for p in candidates) > budget:
             variants = None
             if config.RETRIEVAL_QUERY_MODE != "original":
