@@ -1,0 +1,38 @@
+diff --git a/track_2a/.env.example b/track_2a/.env.example
+index 720b0a3..8c4c3d8 100644
+--- a/track_2a/.env.example
++++ b/track_2a/.env.example
+@@ -19,6 +19,7 @@ PAGE_MAX_CHARS_TAIL=0 # E11 experiment: window for context pages after the first
+ PAGE_FULL_RANKS=4
+ PART_CONTEXT=true          # E12 (adopted): task A context = the booklet part the claim names (contents page)
+ PART_CONTEXT_CHARS=6000
++PART_CONTEXT_CHARS_LEGAL=0  # E23 experiment: budget of the voting-text part (0 = PART_CONTEXT_CHARS)
+ QUICK_PARTS=true           # unparsed booklets: read the needed pages first (same output, less waiting)
+ B_LABEL_ONLY=false         # experiment: task B answers with the label only
+ PROMPT_LEAN=false          # experiment: shorter system prompt, same rules and schema
+diff --git a/track_2a/src/config.py b/track_2a/src/config.py
+index ae7c09a..d4c07c3 100644
+--- a/track_2a/src/config.py
++++ b/track_2a/src/config.py
+@@ -72,6 +72,8 @@ PAGE_FULL_RANKS = int(os.getenv("PAGE_FULL_RANKS", "4"))
+ # regular retrieval.
+ PART_CONTEXT = os.getenv("PART_CONTEXT", "true").lower() in ("true", "1", "yes")
+ PART_CONTEXT_CHARS = int(os.getenv("PART_CONTEXT_CHARS", "6000"))
++# E23 experiment: budget of the voting-text part (dense legal pages), 0 = PART_CONTEXT_CHARS
++PART_CONTEXT_CHARS_LEGAL = int(os.getenv("PART_CONTEXT_CHARS_LEGAL", "0"))
+ # Processing time: a booklet that is not parsed yet is read page by page for the first cases' parts (contents page,
+ # headings, the part's pages; src/quick_booklet.py), the same text and evidence, while the full parse goes on
+ QUICK_PARTS = os.getenv("QUICK_PARTS", "true").lower() in ("true", "1", "yes")
+diff --git a/track_2a/src/inference.py b/track_2a/src/inference.py
+index d1d5f6d..a314a66 100644
+--- a/track_2a/src/inference.py
++++ b/track_2a/src/inference.py
+@@ -377,6 +377,8 @@ class ClaimVerificationEngine:
+             return None
+         label = _PART_LABELS[part]
+         budget, usage = config.PART_CONTEXT_CHARS, (0, 0)
++        if part == "legal_text" and config.PART_CONTEXT_CHARS_LEGAL:
++            budget = config.PART_CONTEXT_CHARS_LEGAL
+         if sum(len(p["text"]) for p in candidates) > budget:
+             variants = None
+             if config.RETRIEVAL_QUERY_MODE != "original":

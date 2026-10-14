@@ -1,0 +1,261 @@
+{
+  "tasks": {
+    "A": {
+      "cases": 8,
+      "macro_f1": 0.4444444444444444,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1
+        },
+        "neutral": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 3
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "support": 4
+        }
+      },
+      "evidence_hit5": 0.4,
+      "gold_evidence_cases": 5,
+      "evidence_found": 2,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0,
+      "passes_acceptance_threshold": false,
+      "cross_language_macro_f1": 0.5555555555555555,
+      "fold_f1_mean": 0.4444444444444444,
+      "fold_f1_std": 0.0,
+      "nonempty_fold_count": 1,
+      "input_tokens_reported": 19491,
+      "output_tokens_reported": 502,
+      "input_tokens_per_case_reported": {
+        "count": 8,
+        "mean": 2436.375,
+        "median": 2450.5,
+        "p95": 2530
+      },
+      "output_tokens_per_case_reported": {
+        "count": 8,
+        "mean": 62.75,
+        "median": 53.0,
+        "p95": 86
+      }
+    }
+  },
+  "by_language": {
+    "A:it->de": {
+      "cases": 1,
+      "macro_f1": 1.0,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "neutral": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "contradiction": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "A:de->de": {
+      "cases": 1,
+      "macro_f1": 0.0,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "neutral": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "contradiction": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1
+        }
+      },
+      "evidence_hit5": 0.0,
+      "gold_evidence_cases": 1,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "A:de->fr": {
+      "cases": 1,
+      "macro_f1": 0.0,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1
+        },
+        "neutral": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "contradiction": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
+      },
+      "evidence_hit5": 0.0,
+      "gold_evidence_cases": 1,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "A:fr->fr": {
+      "cases": 1,
+      "macro_f1": 1.0,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "neutral": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        },
+        "contradiction": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        }
+      },
+      "evidence_hit5": null,
+      "gold_evidence_cases": 0,
+      "evidence_found": 0,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "A:it->fr": {
+      "cases": 1,
+      "macro_f1": 1.0,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "neutral": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 1
+        }
+      },
+      "evidence_hit5": 1.0,
+      "gold_evidence_cases": 1,
+      "evidence_found": 1,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    },
+    "A:it->it": {
+      "cases": 3,
+      "macro_f1": 0.6666666666666666,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "neutral": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 1
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "support": 2
+        }
+      },
+      "evidence_hit5": 0.5,
+      "gold_evidence_cases": 2,
+      "evidence_found": 1,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    }
+  },
+  "folds": {
+    "A:0": {
+      "cases": 8,
+      "macro_f1": 0.4444444444444444,
+      "per_class": {
+        "entailment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 1
+        },
+        "neutral": {
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666,
+          "support": 3
+        },
+        "contradiction": {
+          "precision": 1.0,
+          "recall": 0.5,
+          "f1": 0.6666666666666666,
+          "support": 4
+        }
+      },
+      "evidence_hit5": 0.4,
+      "gold_evidence_cases": 5,
+      "evidence_found": 2,
+      "missing_gold_reference": 0,
+      "invalid_predictions": 0
+    }
+  },
+  "missing_required_evidence": 0,
+  "qualifies": false
+}

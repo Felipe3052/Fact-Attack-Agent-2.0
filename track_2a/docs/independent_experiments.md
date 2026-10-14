@@ -765,3 +765,54 @@ Holdout (27 Sep 2026 booklets, 90 balanced task B claims, new booklets):
   `src/config.py` and both `.env.example` files). An endpoint without logprobs makes every case escalate (the full
   prompt again, so the labels stay those of E17a at ~2.1× the tokens); a refused `logprobs` parameter is retried
   without it. `B_PROMPT=""` restores E17a exactly.
+
+## 19. E23 — a larger budget for the voting-text part of task A (2026-10-14)
+
+- **Error analysis first (offline, no API):** every task A context of E12 was rebuilt (part selection, else the
+  hybrid retrieval; 6 of 1,488 cases cite a page outside the rebuilt context) and the gold passage mapped to booklet
+  pages. The gold page was in the context in 985 of 990 entailment/contradiction cases and in all 60 on the holdout.
+  Of the 48 dataset label errors only 1 had its gold page outside the context (25 had the gold text in full, 8 were
+  neutral gold, 14 had the gold page in context but cut). So denser retrieval (e.g. an embedding model) could fix at
+  most ~1 label and 5 Hit@5 misses, at the cost of image size and local CPU time: not pursued.
+- **What the cut cases have in common:** 12 of the 14 are claims about the voting text, 10 of them cross-lingual. A
+  voting text often spans two dense legal pages; the first one alone nearly fills the shared 6,000-character part
+  budget, and the article the claim names, on the second page, is clipped away (holdout cases 058 and 064: pages
+  30–31, only page 30 kept).
+- **Offline comparison of selections inside an over-budget part** (260 dataset parts over 6,000 characters; gold
+  words kept ≥ 0.6 counts as "in context"):
+
+| Selection inside the part | Gold E/C in context (986) | Cut failures restored (18) | Newly lost | Mean context chars |
+|---|---:|---:|---:|---:|
+| E12: whole pages, BM25 + 2 × vote title, 6,000 | 954 | – | – | 3,613 |
+| No vote-title weight inside the part | 958 | 0 | 1 | 3,612 |
+| ~1,000-character pieces instead of pages | 956 | 2 | 4 | 3,602 |
+| **Voting text 9,000 characters, other parts 6,000** | **964** | **8** | **0** | 3,766 |
+| 9,000 + no vote-title weight | 968 | 8 | 1 | 3,767 |
+| ~1,000-character pieces, 5,000 for all parts | 934 | 2 | 23 | 3,397 |
+
+- **Paired real runs on the changed cases only** (voting-text part over 6,000 characters; same translation cache;
+  `E23_legal_base` / `E23_legal9000`, `HO_E23_legal_base` / `HO_E23_legal9000`): dataset 92 cases 16 → 7 wrong
+  (9 fixed / 0 broken; the base run repeats E12's labels exactly), holdout 8 cases 3 → 0 wrong (3 / 0).
+- **Full runs with the new default** (`E23_legal_text`, `HO_E23_legal_text`, commit `115ca49`, no overrides, 0 failed
+  cases, 0 API failures):
+
+| Task A | E12 (submission before) | **E23** |
+|---|---:|---:|
+| Macro-F1, 1,488 cases | 0.968 | **0.974** (date bootstrap 95 %: +0.002 … +0.012) |
+| Macro-F1 de-duplicated / cross-language | 0.965 / 0.971 | 0.968 / 0.981 |
+| Evidence Hit@5 (990) | 0.975 | **0.983** (8 fixed / 0 broken) |
+| Labels fixed / broken | – | 12 / 2 (see below) |
+| Input / output tokens per case | 1,750 / 59 | 1,791 / 59 (+2.3 %; p95 2,531 → 3,038) |
+| Apertus time mean / p95 | 1.0 s / 1.2 s | 1.1 s / 1.4 s |
+| Claims about the voting text: wrong of 235 | 24 | **13** |
+| Holdout (90): macro-F1 / Hit@5 / tokens | 0.956 / 0.933 / 1,751 | **0.989 / 0.983 / 1,825** (4 → 1 wrong) |
+
+- Of the 14 label changes against E12, 10 are in the 92 changed cases (9 fixed, 1 broken: row 923, which the paired
+  run had kept right) and 4 in cases the switch does not touch (3 fixed, 1 broken) — the run-to-run noise of an
+  unchanged system (3 of 1,488). Folds: 5 of 5 better or equal (+0.000 … +0.011); language pairs: 8 of 9, it→it
+  −0.012 (two labels).
+- **The holdout is not an independent confirmation here:** its cases 058 and 064 were among those that suggested the
+  idea. The dataset gain (+0.007, interval above zero) is the number to rely on.
+- **Decision: adopted** (`PART_CONTEXT_CHARS_LEGAL=9000`, default in `src/config.py` and both `.env.example` files;
+  `0` restores E12 exactly). Only the voting-text part changes; summary, detail, arguments and the fallback retrieval
+  are untouched.

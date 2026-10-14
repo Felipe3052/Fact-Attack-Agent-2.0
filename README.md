@@ -28,22 +28,23 @@ are saved in [`track_2a/results/generalization/`](track_2a/results/generalizatio
 
 | Evaluation set | Task | Macro-F1 | Hit@5 | Input tokens | Output tokens |
 | :--- | :---: | ---: | ---: | ---: | ---: |
-| **Holdout** (unseen booklets, 90 claims) | A | **0.956** | **0.933** | 1,751 | 57 |
+| **Holdout** (unseen booklets, 90 claims) | A | **0.989** | **0.983** | 1,825 | 57 |
 | **Holdout** (unseen booklets, 90 claims) | B | **0.955** | – | 1,390 | 40 |
-| **Dataset** (1,488 pairs) | A | **0.968** | **0.975** | 1,750 | 59 |
+| **Dataset** (1,488 pairs) | A | **0.974** | **0.983** | 1,791 | 59 |
 | **Dataset** (1,488 pairs) | B | **0.982** | – | 865 | 21 |
 
 Tokens are means per case; Hit@5 is the share of gold entailment/contradiction cases where one of the first five evidence items overlaps the gold passage (task A only).
 
 - **Tasks:** A (advanced) = booklet PDF + claim + vote; B (beginner) = reference text + claim. Mean Apertus time per
-  case 1.0 s (A) / 0.25 s (B); processing time outside the model calls stays in the millisecond range per case.
+  case 1.1 s (A) / 0.25 s (B); processing time outside the model calls stays in the millisecond range per case.
 - **Sets:** the holdout is our own, on the 27 September 2026 vote; the dataset is v1.1 with 20 voting dates in 5
-  date-grouped folds (macro-F1 per fold: A 0.954–0.978, B 0.969–0.991).
+  date-grouped folds (macro-F1 per fold: A 0.965–0.980, B 0.969–0.991).
 - **What the holdout is:** 90 claims (30 per label, 10 per language pair) on the booklets of the 27 September 2026
   vote, which are not part of the dataset. We wrote them before the system ever ran on them, and a second team member
   checked every label (90/90 agree). We used the holdout only at the end: to confirm the task B changes (reference cut,
-  tiered budget, cascade) and to check the compact label rules and the part selection for regressions (6 → 6 → 4
-  wrong advanced labels). It is small (± ~0.05 macro-F1) and, for task B, covers only two votes in three languages
+  tiered budget, cascade) and to check the compact label rules, the part selection and the voting-text budget for
+  regressions (6 → 6 → 4 → 1 wrong advanced labels; two of the cases behind the last step had pointed us to it, so
+  for that step the dataset is the measure). It is small (± ~0.05 macro-F1) and, for task B, covers only two votes in three languages
   (about 30 distinct claims).
 - **Whole dataset:** all of it has been used for design decisions by now, including the earlier 5-date test split
   (where the submission before the compact label rules scored A 0.942 / Hit@5 0.833, B 0.972); it shows how stable
@@ -65,7 +66,7 @@ Tokens are means per case; Hit@5 is the share of gold entailment/contradiction c
         │                                              │
         └──────► Contents-guided part selection ◄──────┘
         claim opening → part (summary / detail / committee / Federal Council / voting text)
-        contents page → pages of that part of the case's vote → context (≤ 6,000 chars), [P1] …
+        contents page → pages of that part of the case's vote → context (≤ 6,000 chars, voting text ≤ 9,000), [P1] …
                                   │
                                   │   fallback, no part found: hybrid retrieval
                                   │   BM25(claim + its translation) + 2 × BM25(vote title) over all pages
@@ -82,8 +83,8 @@ Tokens are means per case; Hit@5 is the share of gold entailment/contradiction c
    Zusammenfassung …", "Le comité estime …", "Se il voto viene accettato …"), and every booklet lists, per vote, the
    pages of its parts on its contents page. The earliest cue in the claim's opening picks the part; the contents
    page, checked against the headings printed on those pages, gives its pages; the case's vote title picks the vote.
-   That part (at most 6,000 characters) becomes the whole context. A part is found for 1,476 of the 1,488 dataset
-   claims.
+   That part (at most 6,000 characters; the voting text, often two dense legal pages, 9,000) becomes the whole
+   context. A part is found for 1,476 of the 1,488 dataset claims.
 2. **Fallback: hybrid retrieval that works across languages.** Claims without a recognisable part, and booklets
    without a readable contents page, get the 8 best pages by BM25 with the claim, its translation into the booklet
    language and the vote title. The vote title is written in the booklet's language, so it anchors the right
@@ -125,6 +126,11 @@ in brackets point to the [experiment log](track_2a/docs/experiments.md) and the
   All 1,488 pairs: macro-F1 0.949 → 0.968 (date bootstrap +0.005 … +0.035), Hit@5 0.881 → 0.975, input tokens
   3,915 → 1,750 (−55 %); holdout 0.933 → 0.956. Rejected after measuring: a shorter system prompt [E13] (A −0.016,
   B ~−0.04) and a smaller part budget [E14] (−0.020).
+- **A larger budget for the voting text** [E23]: an offline rebuild of every context showed that the gold page was
+  missing in only 1 of 48 errors (so no embedding retrieval), but in 14 it was cut: a voting text over two dense
+  pages lost the named article to the 6,000-character budget. 9,000 characters for that part only: all 1,488 pairs
+  0.968 → 0.974 (date bootstrap +0.002 … +0.012, 5 of 5 folds equal or better), Hit@5 0.975 → 0.983, voting-text
+  claims 24 → 13 wrong of 235, input tokens +2.3 %; holdout 0.956 → 0.989.
 - **Task B: tiered reference budget and cascade** [E17a, E19c]: references up to 9,000 characters keep 3,000
   (0.984 → 0.987, 1,732 → 1,640 input tokens). On top, a short label-only prompt answers first on at most 2,000
   reference characters; below a label probability of 0.98 (~10 % of the cases) we ask the full prompt again. All
@@ -313,7 +319,7 @@ track_2a/
 ├── app.py                    # Streamlit app (claim check, benchmark dashboard from results/)
 ├── technical_report.md       # Architecture, evaluation, limitations
 ├── docs/experiments.md       # Every experiment with its numbers
-├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E22
+├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E23
 ├── docs/FactAttack_Technical_Report.pdf  # Submission PDF of the report (docs/build_report_pdf.py)
 ├── results/                  # Saved benchmark runs (+ summary.json); generalization/ = decision runs
 ├── data/                     # Demo dataset, 2026-06-14 booklets, holdout claims; hf/ and other booklets are downloaded
