@@ -870,6 +870,9 @@ class ClaimVerificationEngine:
                     out.tokens_completion += first.tokens_completion
                     out.tokens_total += first.tokens_total
                     out.latency_ms += first.latency_ms
+        elif task_a and config.A_PROMPT:
+            out = self.client.infer_compact(texts, model_claim, claim_language=claim_language, vote=vote,
+                                            system_prompt=self.client.A_PROMPTS[config.A_PROMPT])
         elif self.prompt_mode == "ids":
             call = {"context": "", "claim": model_claim, "claim_language": claim_language, "passages": texts}
             if task_a and (config.A_RELATION_PROMPT or config.A_SKILL_PROMPT or config.A_COMPACT_PROMPT):

@@ -192,6 +192,23 @@ class ApertusClient:
 
     B_REASON_PROMPTS = {"topic4"}
 
+    # E27: task A in the same order as the task B prompts, answered as '<label>|<ids>' (a few tokens instead of a
+    # JSON object). Written for this project.
+    _A_TOPIC = (
+        "You check a CLAIM against numbered REFERENCE passages [P1], [P2], ... from an official Swiss federal voting "
+        "booklet. They may be in different languages (German, French, Italian): compare meaning, not wording. Use "
+        "only the passages, never outside knowledge.\n"
+        "Decide in this order:\n"
+        "1. Do the passages deal with the subject of the claim (the same ballot and the same matter)? If not, the "
+        "label is 1.\n"
+        "2. If they do: 0 if they support the claim; 2 only if they state something that cannot be true together "
+        "with the claim (a different number or date, the opposite recommendation); otherwise 1.\n"
+        "Missing information is never a contradiction. 'According to the summary / the committee / the Federal "
+        "Council, X' is 1 when that text does not say X.\n"
+        "Labels: 0 entailment, 1 neutral, 2 contradiction.\n")
+    _A_ANSWER = ("Answer format: the label digit, then '|', then the ids of the passages that justify the label, "
+                 "e.g. '0|P2' or '2|P3,P7'. For 1 answer '1|'. No other text.")
+
     def infer_label(
         self,
         passages: List[str],
@@ -251,6 +268,7 @@ class ApertusClient:
         claim: str,
         claim_language: Optional[str] = None,
         vote: Optional[str] = None,
+        system_prompt: Optional[str] = None,
     ) -> NLIOutput:
         """
         Token-efficient NLI: passages are numbered [P1]..[Pn]; the model answers '<label>|<ids>'.
@@ -269,7 +287,7 @@ class ApertusClient:
             return out
 
         response, err = self._chat(
-            [{"role": "system", "content": self.COMPACT_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
+            [{"role": "system", "content": system_prompt or self.COMPACT_SYSTEM_PROMPT}, {"role": "user", "content": user_prompt}],
             max_tokens=24,
             logprobs=True,
         )
@@ -296,7 +314,7 @@ class ApertusClient:
                 ids.append(i)
 
         usage = getattr(response, "usage", None)
-        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens(self.COMPACT_SYSTEM_PROMPT + user_prompt)
+        tp = getattr(usage, "prompt_tokens", None) or self._estimate_tokens((system_prompt or self.COMPACT_SYSTEM_PROMPT) + user_prompt)
         tc = getattr(usage, "completion_tokens", None) or self._estimate_tokens(content)
         return NLIOutput(
             label=label,
@@ -529,6 +547,8 @@ class ApertusClient:
         "same claim; missing support is not a contradiction. 1 if they neither support nor refute it. Use only the "
         "passages, no outside facts.\n"
     )
+    A_PROMPTS = {"topic": _A_TOPIC + _A_ANSWER,
+                 "topic_rules": _A_TOPIC + A_COMPACT_PROMPT_TEXT.lstrip("\n") + _A_ANSWER}
 
     # E25: blocks of the 'ids' system prompt that task A can leave out (A_PROMPT_DROP); each is removed verbatim
     _CONFIDENCE_HELP = (

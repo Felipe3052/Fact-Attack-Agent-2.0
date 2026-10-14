@@ -120,6 +120,9 @@ A_PROMPT_DROP = os.getenv("A_PROMPT_DROP", "").strip()
 # E26 experiment: when every task A passage has the same section (a part context), name it once before the first
 # passage instead of before each one
 A_PART_LABEL_ONCE = os.getenv("A_PART_LABEL_ONCE", "false").lower() in ("true", "1", "yes")
+# E27 experiment: a short task A prompt that decides in a fixed order (the subject first) and answers
+# "<label>|<passage ids>" (ApertusClient.A_PROMPTS: topic, topic_rules); empty = the JSON prompt
+A_PROMPT = os.getenv("A_PROMPT", "").strip()
 # Optional, hash-only audit of exact NLI inputs for paired prompt experiments.
 PROMPT_INPUT_JOURNAL_PATH = os.getenv("PROMPT_INPUT_JOURNAL_PATH", "")
 
