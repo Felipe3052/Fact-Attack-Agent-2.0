@@ -258,7 +258,7 @@ Only the public dataset (v1.1), the organisers' starter scorer (`evaluate.py`) a
   was changed.
 - Limits: the reviewer had the claims file with the labels open before the review, so the check may not be
   fully blind; translations are reading aids, the claims are judged in their original language.
-  Judgements: `data/holdout_2026-09-27/review_felipe.jsonl`.
+  Judgements: `data/holdout_2026-09-27/label_review.jsonl`.
 
 ## 4. Final check on the untouched holdout (2026-10-11, run once)
 

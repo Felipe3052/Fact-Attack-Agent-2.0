@@ -72,7 +72,7 @@ A heading applies to its page and the following pages until the next heading, an
 opposing viewpoints: the model has to know whether a page states the committee's or the Federal Council's position.
 The same pass also reads every page with PyMuPDF (text and text blocks) for the evidence quotes (2.3). Booklets that
 are not in the image are parsed by a process pool at start-up, one booklet after the other in the order of their cases;
-the parse of the 60 dataset booklets is baked into the image.
+the parse of the 60 dataset booklets (only the PDFs' text and blocks: no claims, labels or scores) is in the image.
 
 ### 2.2 Context selection: contents-guided part selection
 The dataset's claims name their source in their opening ("Laut der Zusammenfassung …", "Le comité estime …",
@@ -138,8 +138,8 @@ fixes the decision order (is the subject dealt with, then support, contradiction
 digit alone loses 0.02–0.04 F1 by itself. (3) **Cascade (submission):** that short call sees at most 2,000 characters;
 when its label probability is below 0.98 (~10 % of the cases) the case is asked again with the full prompt of (1), and
 both calls' tokens count. Most of the short call's errors lie in that unsure part. All pairs: macro-F1 0.982,
-865 input and 21 output tokens (−48 %). On the holdout (two votes, ~30 distinct claims) it saves 22 % at 4 instead of
-3 wrong labels. The token score cannot be computed locally, so the net effect is estimated (about +0.06 on the
+865 input and 21 output tokens (−48 %). On the holdout (two votes, ~30 distinct claims) it saves 21–22 % at 4–6
+instead of 3 wrong labels (two runs). The token score cannot be computed locally, so the net effect is estimated (about +0.06 on the
 beginner score under an assumed best-team value of ~820 tokens). `B_PROMPT=` restores (1); `B_ESCALATE_BELOW=0.999` with
 `B_SHORT_CHARS=2500` keeps the labels of (1) at −26 % tokens.
 
@@ -197,8 +197,8 @@ with an Apertus request in flight.
   60 booklets (2020–2026), balanced labels, ~66 % cross-lingual pairs.
 - **Booklets:** downloaded from `bk.admin.ch` via the `booklet_url` field (`python -m src.hf_dataset`).
 - **Split by voting date**, so all three language versions of a booklet stay on the same side: **dev** (1,093 pairs,
-  15 dates) and **test** (402 pairs, 5 dates). Test served several before/after decisions, so it is development
-  data by now, not a holdout.
+  15 dates) and **test** (402 pairs, 5 dates; 398 in v1.1). Test served several before/after decisions, so it is
+  development data by now, not a holdout.
 - **Official scorer:** cases from the starter repo's `prepare_cases.py` (dataset v1.1), scored with its
   `evaluate.py`. Final measurements run the official CLI on **all 1,488 pairs per task in five folds grouped by
   voting date** (`scripts/run_decision.py`, which forces the submission settings of `.env.example`), and report
@@ -277,7 +277,7 @@ names is the cheapest and the most accurate.
 | E15 / E16: task B references cut at 3,000 chars / label-only answer inside the full prompt | B 0.984 → 0.980 (−21 % tokens) / 0.871 (no confidences: N→C) | rejected |
 | E17a: task B references ≤ 9,000 chars cut to 3,000 | B 0.9845 → 0.9872, −5 % tokens; holdout equal | adopted |
 | E18: short label-only prompts (four variants, 190 tokens) | B 0.987 → 0.948–0.966, −30 % tokens | rejected alone |
-| **E19c: cascade, short call (≤ 2,000 chars), full prompt below p = 0.98** | B 0.987 → 0.982, −48 % tokens; holdout 3 → 4–6 wrong of 90, −22 % | **adopted** |
+| **E19c: cascade, short call (≤ 2,000 chars), full prompt below p = 0.98** | B 0.987 → 0.982, −48 % tokens; holdout 3 → 4–6 wrong of 90 (4 in 5.1), −21 … −22 % | **adopted** |
 | E21b: cascade at p = 0.999, 2,500 chars | B 0.987 → 0.987, −26 % tokens; holdout +18 % tokens | settings only |
 
 Full tables: [docs/experiments.md](docs/experiments.md) and [docs/independent_experiments.md](docs/independent_experiments.md).
