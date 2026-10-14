@@ -10,10 +10,10 @@ or **contradicts (2)** a claim, and cites the booklet pages that justify the dec
 German, French and Italian.
 
 - **Results** (submission configuration, official CLI, organisers' `evaluate.py`):
-  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.956** macro-F1,
-    Hit@5 **0.933**, 1,751 input tokens; beginner **0.955**, 1,390 input tokens
-  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.968**, Hit@5 **0.975**,
-    1,750 input tokens; beginner **0.982**, 865 input tokens (before the task B cascade: 0.987, 1,640)
+  - **unseen booklets** (own holdout, 27 Sep 2026 vote, 90 claims): advanced **0.989** macro-F1,
+    Hit@5 **0.983**, 1,825 input tokens; beginner **0.955**, 1,390 input tokens
+  - **whole dataset** (v1.1, 1,488 pairs, 20 voting dates in 5 grouped folds): advanced **0.974**, Hit@5 **0.983**,
+    1,791 input tokens; beginner **0.982**, 865 input tokens (before the task B cascade: 0.987, 1,640)
 - **Overview:** [../README.md](../README.md) · **Technical report:** [technical_report.md](technical_report.md) ([PDF](docs/FactAttack_Technical_Report.pdf)) ·
   **Experiment logs:** [docs/experiments.md](docs/experiments.md), [docs/independent_experiments.md](docs/independent_experiments.md)
 
@@ -21,7 +21,7 @@ German, French and Italian.
 
 The earlier comparison of retrieval and evidence variants (R2 and others, all 1,488 cases, k=12) is in the
 [optimization report](docs/competition_optimization_report.md). The measurements since then (reproducible decision
-runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E22) are in
+runs, a repeated baseline as noise floor, the holdout, and the experiments E1–E23) are in
 [independent_experiments.md](docs/independent_experiments.md) with their predictions in
 [results/generalization/](results/generalization/).
 
@@ -56,6 +56,7 @@ B_SHORT_CHARS=2000                          # task B: reference characters the f
 A_COMPACT_PROMPT=true                       # task A: compact label rules (E7, on in the submission; false = previous baseline)
 PART_CONTEXT=true                           # task A: context = the booklet part the claim names, via the contents page (E12)
 PART_CONTEXT_CHARS=6000                     # at most this many characters of that part
+PART_CONTEXT_CHARS_LEGAL=9000               # the voting-text part may keep this many (E23; 0 = PART_CONTEXT_CHARS)
 NLI_WORKERS=4                               # cases processed in parallel by the batch CLI
 ```
 
@@ -76,6 +77,11 @@ case is asked again with the full prompt (references up to 9,000 characters keep
 located with the contents page (`src/part_context.py`); claims without such an opening, or booklets without a readable
 contents page, keep the retrieval. All 1,488 task A pairs: macro-F1 0.949 → 0.968, Hit@5 0.881 → 0.975, input tokens
 −55 %; see `docs/independent_experiments.md`, sections 11–13.
+
+`PART_CONTEXT_CHARS_LEGAL` (9000 by default, E23) gives the voting-text part its own budget: a voting text often spans
+two dense legal pages, and with 6,000 characters the article a claim names was cut off behind the first one. All
+1,488 task A pairs: macro-F1 0.968 → 0.974, Hit@5 0.975 → 0.983, input tokens +2.3 %; holdout 0.956 → 0.989.
+`PART_CONTEXT_CHARS_LEGAL=0` restores E12; see `docs/independent_experiments.md`, section 19.
 
 A value set in a local `.env` overrides these for local runs; keep only endpoint and key there.
 `python scripts/run_decision.py --data <prepared cases> --name <run>` runs exactly the submission configuration
@@ -154,7 +160,7 @@ track_2a/
 ├── technical_report.md       # Architecture, evaluation, findings, limitations
 ├── .env.example              # Every setting with its default (= what the submission image runs)
 ├── docs/experiments.md       # Every experiment with its numbers
-├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E22
+├── docs/independent_experiments.md  # Grouped validation, noise floor, holdout, experiments E1–E23
 ├── docs/FactAttack_Technical_Report.pdf  # Submission PDF of the report (docs/build_report_pdf.py)
 ├── results/                  # Saved benchmark runs + summary.json
 │   └── generalization/       # Decision runs: predictions, official scores, fold/language/class reports
