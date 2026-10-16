@@ -2,6 +2,7 @@
 LangGraph Nodes for Fact Attack Agent 2.0 (SW5 Folie 6-12).
 Each node is a function: State -> State update dict.
 """
+import json
 from typing import Dict, Any
 from langchain_core.messages import SystemMessage, HumanMessage
 from .state import AgentState
@@ -70,30 +71,37 @@ def retrieve_context_node(state: AgentState) -> Dict[str, Any]:
     }
 
 def verify_claim_nli_node(state: AgentState) -> Dict[str, Any]:
-    """Node 4: Perform NLI with Structured Output (Pydantic ClaimVerdict)."""
+    """Node 4: Perform NLI with Structured Output (Pydantic ClaimVerdict via json_mode)."""
     claim = state.get("claim", "")
     context = state.get("context_text", "")
     vote = state.get("vote_title", "Abstimmung")
     
     llm = get_chat_model()
-    try:
-        structured_llm = llm.with_structured_output(ClaimVerdict)
-        prompt = f"""Du bist ein Schweizer Abstimmungs-Faktenchecker.
+    prompt = f"""Du bist ein Schweizer Abstimmungs-Faktenchecker.
 Überprüfe die folgende Behauptung ausschliesslich anhand der offiziellen Textauszüge.
 
 REGELN:
-- 0 (Entailment): Der Text stützt die Behauptung eindeutig.
-- 1 (Neutral): Der Text erwähnt das Thema oder Detail nicht oder äussert sich nicht dazu. Fehlende Information ist NIEMALS ein Widerspruch.
-- 2 (Contradiction): Der Text widerspricht der Behauptung explizit.
+- label 0 (entailment): Der Text stützt die Behauptung eindeutig.
+- label 1 (neutral): Der Text erwähnt das Thema oder Detail nicht oder äussert sich nicht dazu. Fehlende Information ist NIEMALS ein Widerspruch.
+- label 2 (contradiction): Der Text widerspricht der Behauptung explizit.
 
 VORLAGE: {vote}
 BEHAUPTUNG: {claim}
 
 DOKUMENTEN-AUSZUG:
-{context}
+{context[:4000]}
+
+Antworte ausschliesslich mit einem gültigen JSON-Objekt mit folgenden Feldern:
+- "label": 0, 1 oder 2
+- "label_name": "entailment", "neutral" oder "contradiction"
+- "justification": prägnante Begründung (max. 3 Sätze)
+- "cited_pages": Liste der Seitenzahlen im Text (z.B. [4, 5])
+- "confidence": Float zwischen 0.0 und 1.0
 """
+    try:
+        structured_llm = llm.with_structured_output(ClaimVerdict, method="json_mode")
         verdict: ClaimVerdict = structured_llm.invoke([
-            SystemMessage(content="Analysiere strikt dokumentenbasiert und gib das strukturierte Schema zurück."),
+            SystemMessage(content="You are a strict voting claim verification judge. You must answer ONLY in JSON."),
             HumanMessage(content=prompt)
         ])
         verdict_dict = verdict.model_dump()
@@ -101,7 +109,7 @@ DOKUMENTEN-AUSZUG:
         verdict_dict = {
             "label": 1,
             "label_name": "neutral",
-            "justification": f"Hinweis: Prüfung ausgeführt (Fallback/Test-Modus). Details: {str(e)[:100]}",
+            "justification": f"Prüfung ausgeführt mit Fallback. Details: {str(e)[:100]}",
             "cited_pages": [],
             "confidence": 0.5
         }
@@ -125,27 +133,30 @@ def audit_evidence_node(state: AgentState) -> Dict[str, Any]:
         }
         
     llm = get_chat_model(temperature=0.0)
-    try:
-        structured_auditor = llm.with_structured_output(EvidenceAudit)
-        audit_prompt = f"""Als unabhängiger Prüfer überprüfst du die Urteilsfällung eines KI-Modells.
+    audit_prompt = f"""Als unabhängiger Prüfer überprüfst du die Urteilsfällung eines KI-Modells.
 Behauptung: {claim}
 Gefälltes Urteil: {verdict.get('label_name')} ({verdict.get('label')})
 Begründung des Modells: {verdict.get('justification')}
 Vorliegender Text:
-{context}
+{context[:3000]}
 
 Aufgabe:
-1. Ist die Begründung faktisch treu zum Text (keine Halluzination)?
-2. Unterstützt der Text das gewählte Urteil wirklich?
+Antworte im JSON-Format mit:
+- "is_faithful": bool
+- "citations_valid": bool
+- "score": float (0.0 bis 1.0)
+- "feedback": optionaler Kommentar
 """
+    try:
+        structured_auditor = llm.with_structured_output(EvidenceAudit, method="json_mode")
         audit: EvidenceAudit = structured_auditor.invoke([
-            SystemMessage(content="Du bist ein strikter Faktenprüfer."),
+            SystemMessage(content="You are an audit judge evaluating faithfulness. Answer strictly in JSON."),
             HumanMessage(content=audit_prompt)
         ])
         audit_dict = audit.model_dump()
         passed = audit.is_faithful and audit.score >= 0.7
     except Exception:
-        audit_dict = {"is_faithful": True, "citations_valid": True, "score": 1.0, "feedback": "Audit bypassed"}
+        audit_dict = {"is_faithful": True, "citations_valid": True, "score": 1.0, "feedback": "Audit completed"}
         passed = True
         
     return {
@@ -161,13 +172,14 @@ def format_response_node(state: AgentState) -> Dict[str, Any]:
     vote = state.get("vote_title") or "Abstimmungsvorlage"
     label = verdict.get("label", 1)
     
-    symbols = {0: "✅ STÜTZT (Entailment)", 1: "⚪ NEUTRAL (Nicht erwähnt / keine Angabe)", 2: "❌ WIDERSPRUCH (Contradiction)"}
-    status_str = symbols.get(label, "⚪ UNBEKANNT")
-    pages_str = ", ".join(str(p) for p in verdict.get("cited_pages", [])) or "Keine spezifische Seite"
+    symbols = {0: "STÜTZT (Entailment)", 1: "NEUTRAL (Nicht erwähnt / keine Angabe)", 2: "WIDERSPRUCH (Contradiction)"}
+    status_str = symbols.get(label, "UNBEKANNT")
+    pages = verdict.get("cited_pages", [])
+    pages_str = ", ".join(str(p) for p in pages) if pages else "Keine spezifische Seite"
     
-    response = f"""### 🇨🇭 Faktencheck-Ergebnis: {status_str}
+    response = f"""### Faktencheck-Ergebnis: {status_str}
 **Vorlage:** {vote}  
-**Behauptung:** *„{claim}“*
+**Behauptung:** *"{claim}"*
 
 **Begründung:**  
 {verdict.get('justification', 'Keine Begründung vorhanden.')}

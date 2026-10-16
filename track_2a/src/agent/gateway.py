@@ -10,31 +10,34 @@ def get_chat_model(
     model_name: Optional[str] = None,
     temperature: float = 0.0,
     timeout: float = 120.0,
+    provider: Optional[str] = None,
 ) -> ChatOpenAI:
-    """Factory to create a ChatOpenAI client routed to LiteLLM or direct provider.
-    Priority:
-    1. LITELLM_URL & LITELLM_API_KEY (FHNW Gateway)
-    2. BASE_URL & API_KEY (CSCS Apertus Endpoint)
-    3. LLM_BASE_URL & LLM_API_KEY
+    """Factory to create a ChatOpenAI client.
+    Intelligently pairs endpoint and API key:
+    - If provider == 'litellm' or USE_LITELLM == 'true': uses FHNW LiteLLM Gateway
+    - Default (Swiss AI / CSCS): uses CSCS Apertus endpoint
     """
-    base_url = (
-        os.getenv("LITELLM_URL")
-        or os.getenv("BASE_URL")
-        or os.getenv("LLM_BASE_URL")
-        or "https://api.inference.cscs.ch/v1"
-    )
-    api_key = (
-        os.getenv("LITELLM_API_KEY")
-        or os.getenv("API_KEY")
-        or os.getenv("LLM_API_KEY")
-        or "dummy_key"
-    )
     model = (
         model_name
         or os.getenv("MODEL")
         or os.getenv("LLM_NAME")
         or "swiss-ai/Apertus-v1.5-70B-thinking"
     )
+    
+    use_litellm = (
+        provider == "litellm"
+        or os.getenv("USE_LITELLM", "false").lower() == "true"
+        or (model_name and not model_name.startswith("swiss-ai"))
+    )
+    
+    if use_litellm and os.getenv("LITELLM_API_KEY") and not os.getenv("LITELLM_API_KEY", "").startswith("DEIN_"):
+        base_url = os.getenv("LITELLM_URL", "https://litellm.fhnw.ch/v1")
+        api_key = os.getenv("LITELLM_API_KEY")
+        model = model_name or os.getenv("LITELLM_MODEL", "gpt-4o")
+    else:
+        base_url = os.getenv("BASE_URL") or os.getenv("LLM_BASE_URL") or "https://api.inference.cscs.ch/v1"
+        api_key = os.getenv("API_KEY") or os.getenv("LLM_API_KEY") or "dummy_key"
+        
     return ChatOpenAI(
         model=model,
         base_url=base_url,
