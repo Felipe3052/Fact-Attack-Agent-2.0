@@ -1,6 +1,9 @@
 # 🇨🇭 Fact Attack 2026 — Hack Apertus Track 2A (OST)
 ## Multilingual Natural Language Inference over Swiss Official Voting Booklets
 
+> **Mirror** of the team repository [JJukic/Apertus-Team-Fact-Attack-2026](https://github.com/JJukic/Apertus-Team-Fact-Attack-2026),
+> where development, CI and issues live. I'm one of the four team members.
+
 [![CI](https://github.com/JJukic/Apertus-Team-Fact-Attack-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/JJukic/Apertus-Team-Fact-Attack-2026/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12.6-blue.svg)](https://www.python.org/)
 [![Model](https://img.shields.io/badge/Model-Apertus%20v1.5--70B-orange.svg)](https://huggingface.co/swiss-ai)
